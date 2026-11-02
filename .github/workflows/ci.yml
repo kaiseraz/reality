@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: reality
+          POSTGRES_PASSWORD: reality
+          POSTGRES_DB: reality
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reality -d reality"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run build
+
+  sandbox-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t reality-sandbox-python:ci sandbox/python
+      - name: Smoke test under runtime restrictions
+        run: >
+          docker run --rm --network none --read-only --cap-drop ALL
+          --security-opt no-new-privileges --pids-limit 64 --memory 512m --cpus 1
+          reality-sandbox-python:ci
+          python -c "import pandas, numpy, pyarrow; print('ok')"

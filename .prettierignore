@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+package-lock.json
+docs/execution-plan.md
+
+# Data and tool settings, not code
+.claude/

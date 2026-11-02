@@ -1,0 +1,17 @@
+{
+  "name": "@reality/schemas",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Shared typed contracts: task state, workspace spec, capabilities, events.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  }
+}

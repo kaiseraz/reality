@@ -1,0 +1,31 @@
+{
+  "board": { "width_mm": 50, "height_mm": 35 },
+  "rules": {
+    "clearance_mm": 0.2,
+    "track_mm": 0.25,
+    "power_track_mm": 0.4,
+    "via_dia_mm": 0.6,
+    "via_drill_mm": 0.3,
+    "edge_clearance_mm": 0.3,
+    "grid_mm": 0.2
+  },
+  "parts": [
+    { "ref": "U1", "footprint": "SOIC8", "value": "NE555" },
+    { "ref": "R1", "footprint": "R0603", "value": "10k" },
+    { "ref": "R2", "footprint": "R0603", "value": "47k" },
+    { "ref": "R3", "footprint": "R0603", "value": "470" },
+    { "ref": "C1", "footprint": "C0603", "value": "10u" },
+    { "ref": "C2", "footprint": "C0603", "value": "100n" },
+    { "ref": "D1", "footprint": "LED0603", "value": "red" },
+    { "ref": "J1", "footprint": "HEADER1x2", "value": "power", "edge": "left" }
+  ],
+  "nets": [
+    { "name": "VCC", "class": "power", "pins": ["J1.1", "U1.8", "U1.4", "R1.1", "C2.1"] },
+    { "name": "GND", "class": "power", "pins": ["J1.2", "U1.1", "C1.2", "C2.2", "D1.2"] },
+    { "name": "DIS", "pins": ["U1.7", "R1.2", "R2.1"] },
+    { "name": "TRIG", "pins": ["U1.2", "U1.6", "R2.2", "C1.1"] },
+    { "name": "OUT", "pins": ["U1.3", "R3.1"] },
+    { "name": "LED", "pins": ["R3.2", "D1.1"] },
+    { "name": "CV", "pins": ["U1.5"] }
+  ]
+}

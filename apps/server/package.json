@@ -1,0 +1,42 @@
+{
+  "name": "@reality/server",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Reality core: API, orchestrator, policy, workspace and capability engines (trusted zone).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",
+    "start": "tsx --env-file-if-exists=../../.env src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "eval": "tsx eval/run.ts",
+    "check:model": "tsx --env-file-if-exists=../../.env check-model.ts",
+    "eval:design": "tsx --env-file-if-exists=../../.env eval/design-live.ts",
+    "gen:pcb": "node scripts/gen-pcb.mjs",
+    "eval:desktop": "tsx --env-file-if-exists=../../.env eval/desktop-live.ts",
+    "eval:desktop-cad": "tsx --env-file-if-exists=../../.env eval/desktop-cad-live.ts",
+    "eval:desktop-drive": "tsx --env-file-if-exists=../../.env eval/desktop-drive-live.ts",
+    "eval:adapt": "tsx --env-file-if-exists=../../.env eval/adapt-live.ts",
+    "eval:servers": "tsx --env-file-if-exists=../../.env eval/servers-live.ts",
+    "eval:skills": "tsx --env-file-if-exists=../../.env eval/skills-compare.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.135.0",
+    "@langchain/core": "1.2.18",
+    "@langchain/langgraph": "1.5.1",
+    "@langchain/langgraph-checkpoint": "1.2.0",
+    "@langchain/langgraph-checkpoint-postgres": "1.1.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@reality/schemas": "0.0.0",
+    "@reality/workspace": "0.0.0",
+    "fastify": "5.12.7",
+    "papaparse": "5.7.0",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/papaparse": "5.5.2",
+    "@types/pg": "8.23.1",
+    "tsx": "4.23.15"
+  }
+}

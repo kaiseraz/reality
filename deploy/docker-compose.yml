@@ -1,0 +1,54 @@
+# Production-style deployment on one Linux host with Docker.
+#   docker build -t reality-sandbox-python:dev ../sandbox/python
+#   cp .env.example .env   (then edit it)
+#   docker compose up -d --build
+# Read README.md in this folder first: the server controls the host's Docker engine.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: reality
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: reality
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U reality -d reality']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  reality:
+    build:
+      context: ..
+    image: reality:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://reality:${POSTGRES_PASSWORD}@postgres:5432/reality
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AUTH: 'on'
+      PROJECT_FOLDERS: 'off'
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-}
+      # Sandboxes are started by the host engine, which resolves bind-mount paths on the
+      # host. These directories therefore have the same path inside and outside.
+      ARTIFACT_DIR: ${REALITY_DATA:-/srv/reality}/artifacts
+      CAPABILITY_DIR: ${REALITY_DATA:-/srv/reality}/capabilities
+      RUN_DIR: ${REALITY_DATA:-/srv/reality}/runs
+    volumes:
+      - ${REALITY_DATA:-/srv/reality}:${REALITY_DATA:-/srv/reality}
+      - /var/run/docker.sock:/var/run/docker.sock
+    # The group that owns /var/run/docker.sock on the host (getent group docker).
+    group_add:
+      - '${DOCKER_GID:?set DOCKER_GID in .env}'
+    ports:
+      # Behind a TLS reverse proxy; bind to localhost unless the proxy runs elsewhere.
+      - '${BIND_ADDRESS:-127.0.0.1}:${PORT:-8787}:8787'
+
+volumes:
+  pgdata:

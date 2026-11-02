@@ -1,0 +1,18 @@
+{
+  "name": "@reality/workspace",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Adaptive workspace engine: component registry, patch application, undo, templates. Pure TypeScript, shared by server and web.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@reality/schemas": "0.0.0",
+    "zod": "4.6.7"
+  }
+}

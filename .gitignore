@@ -1,0 +1,23 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.*.local
+.DS_Store
+# Local runtime data (artifacts, sandbox outputs) — never committed
+.data/
+
+# Frames taken from the Spot reference video: local only, never committed or published
+apps/web/public/spot-ink/
+Spot Gesichter/
+Spot Video.mp4
+Bot Clips/
+
+.server-logs/
+
+# Local tool settings and machine-specific launch configs
+.claude/
+
+# Database dumps
+backups/

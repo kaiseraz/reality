@@ -1,0 +1,53 @@
+{
+  "name": "reality",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Reality — The Adaptive AI Workspace",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev --workspace @reality/server",
+    "dev:web": "npm run dev --workspace @reality/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "build": "npm run build --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "sandbox:build": "docker build -t reality-sandbox-python:dev sandbox/python && docker build -t reality-sandbox-node:dev sandbox/node",
+    "computer:build": "docker build -t reality-computer:dev sandbox/computer",
+    "dev": "node scripts-dev.mjs",
+    "setup": "docker compose up -d --wait postgres && docker build -t reality-sandbox-python:dev sandbox/python && docker build -t reality-sandbox-node:dev sandbox/node",
+    "eval": "npm run eval --workspace @reality/server",
+    "check:model": "npm run check:model --workspace @reality/server",
+    "eval:design": "npm run eval:design --workspace @reality/server --",
+    "gen:pcb": "npm run gen:pcb --workspace @reality/server",
+    "eval:desktop": "npm run eval:desktop --workspace @reality/server --",
+    "eval:desktop-cad": "npm run eval:desktop-cad --workspace @reality/server --",
+    "eval:desktop-drive": "npm run eval:desktop-drive --workspace @reality/server --",
+    "eval:adapt": "npm run eval:adapt --workspace @reality/server --",
+    "eval:servers": "npm run eval:servers --workspace @reality/server --",
+    "eval:skills": "npm run eval:skills --workspace @reality/server --"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.5",
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vitest": "5.0.5"
+  }
+}
