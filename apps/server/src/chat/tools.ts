@@ -18,7 +18,12 @@ import { validSecretName } from '../capabilities/secrets.ts';
 import type { SkillService } from '../capabilities/skills.ts';
 import type { LabPresets } from '../lab/plan.ts';
 import type { FileStore } from '../artifacts/file-store.ts';
-import { ComputerError, normalizeDomain, type BotComputers } from '../computer/computers.ts';
+import {
+  ComputerError,
+  computerPath,
+  normalizeDomain,
+  type BotComputers,
+} from '../computer/computers.ts';
 import {
   buildInputCommand,
   describeInput,
@@ -37,6 +42,26 @@ import type { Chat, ChatStore } from './store.ts';
 /** KiCad's and FreeCAD's windows take --version for a file to open, and say so in a dialog. */
 const OPENS_A_DIALOG =
   /(?:^|[\s;&|/])(?:kicad|pcbnew|eeschema|gerbview|freecad|FreeCAD)(?:\s+[^;&|\n]*)?\s--?(?:help|version|h|v)\b/;
+
+/** A program a bot names for computer_open: a command name, nothing the shell would read. */
+const PROGRAM = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,59}$/;
+
+/**
+ * The program that shows a file on the desktop: the one the bot names, else the usual one for
+ * the file type, else null for the desktop's default. Any field's program the bot installed
+ * works by name; these are only the ones a file type implies.
+ */
+export function viewerFor(path: string, program = ''): string | null {
+  if (program) return program;
+  const lower = path.toLowerCase();
+  // pcbnew is the PCB editor itself; the kicad launcher wants a project (.kicad_pro) file.
+  if (lower.endsWith('.kicad_pcb')) return 'pcbnew';
+  if (lower.endsWith('.kicad_sch')) return 'eeschema';
+  if (/\.(step|stp|stl|3mf|obj)$/.test(lower)) return 'freecad';
+  if (/\.(gbr|gbl|gtl|gbs|gts|drl|xln)$/.test(lower)) return 'gerbview';
+  if (/\.(pdb|ent|cif|mmcif|sdf|mol|mol2|xyz|pse)$/.test(lower)) return 'pymol';
+  return null;
+}
 
 /**
  * What a bot can do in a chat. Every tool goes through Reality's own guarded paths: data
@@ -311,8 +336,17 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'computer_open',
     description:
-      'Opens a file on your computer\'s desktop so the user sees it live like in the Astra demo: KiCad board files (.kicad_pcb) in KiCad, Gerbers in gerbview, STEP/STL/3MF in FreeCAD, images/CSVs in viewer. Uses DISPLAY=:99. Install the viewer first with computer_run if missing (sudo apt-get install -y kicad freecad). Example: path "~/workspace/board.kicad_pcb".',
-    input_schema: obj({ path: { type: 'string' } }, ['path']),
+      'Opens a file on your computer\'s desktop so the user sees it live like in the Astra demo: KiCad board files (.kicad_pcb) in KiCad, Gerbers in gerbview, STEP/STL/3MF in FreeCAD, molecules and protein structures (.pdb, .cif, .sdf, .mol2, .xyz) in PyMOL, anything else in the desktop\'s default program. For any other program you installed (a GIS tool, a plotter, an editor), name it in program. Uses DISPLAY=:99. If the program is missing you are told so: install it with computer_run (apt-get, pip or conda) and open again. Example: path "~/workspace/board.kicad_pcb".',
+    input_schema: obj(
+      {
+        path: { type: 'string' },
+        program: {
+          type: 'string',
+          description: 'Optional: the command of an installed program to open it with, e.g. "qgis"',
+        },
+      },
+      ['path'],
+    ),
   },
   {
     name: 'open_lab_result',
@@ -1270,12 +1304,18 @@ ${out.output.slice(-8000) || '(no output)'}${blocked}`,
         if (name === 'computer_open') {
           // A result may be on its way to the desktop; opening beside it would collide.
           await desktopReady(bot.id);
-          const raw = str(input.path, 500);
-          // Normalize ~/workspace and ensure it exists on the computer.
-          const safe = raw.replace(/^~\//, '/home/gem/workspace/').replace(/^~/, '/home/gem');
-          const full = safe.startsWith('/') ? safe : `/home/gem/workspace/${safe}`;
-          // Choose viewer by extension, fall back to xdg-open. All with DISPLAY=:99 so it shows in VNC.
+          const full = computerPath(str(input.path, 500));
+          const q = (s: string) => `'${s.replace(/'/g, `'"'"'`)}'`;
           const lower = full.toLowerCase();
+          const wanted = str(input.program, 80).trim();
+          if (wanted && !PROGRAM.test(wanted)) {
+            return { text: 'Give the program as its command name, like qgis.', isError: true };
+          }
+          // Saying "opened" for a file that is not there leaves the person looking at nothing.
+          const exists = await pc.exec(bot.id, `test -e ${q(full)} && echo found`, 15, false);
+          if (!exists.output.includes('found')) {
+            return { text: `${full} does not exist on your computer.`, isError: true };
+          }
           // KiCad refuses a second window on one board, and it would ask about that on screen.
           if (lower.endsWith('.kicad_pcb')) {
             const stem = (full.split('/').pop() ?? '').replace(/\.kicad_pcb$/i, '');
@@ -1286,15 +1326,18 @@ ${out.output.slice(-8000) || '(no output)'}${blocked}`,
               };
             }
           }
-          let viewer = `xdg-open '${full.replace(/'/g, `'"'"'`)}'`;
-          // pcbnew is the PCB editor itself; the kicad launcher wants a project (.kicad_pro) file.
-          if (lower.endsWith('.kicad_pcb')) viewer = `pcbnew '${full.replace(/'/g, `'"'"'`)}'`;
-          else if (lower.endsWith('.kicad_sch'))
-            viewer = `eeschema '${full.replace(/'/g, `'"'"'`)}'`;
-          else if (/\.(step|stp|stl|3mf|obj)$/.test(lower))
-            viewer = `freecad '${full.replace(/'/g, `'"'"'`)}'`;
-          else if (/\.(gbr|gbl|gtl|gbs|gts|drl|xln)$/.test(lower))
-            viewer = `gerbview '${full.replace(/'/g, `'"'"'`)}'`;
+          // A program the bot named or the one that fits the file; the desktop's default otherwise.
+          const program = viewerFor(full, wanted);
+          if (program) {
+            const has = await pc.exec(bot.id, `command -v ${q(program)}`, 15, false);
+            if (has.exitCode !== 0) {
+              return {
+                text: `${program} is not installed on your computer. Install it with computer_run (apt-get, pip or conda), then open the file again.`,
+                isError: true,
+              };
+            }
+          }
+          const viewer = program ? `${q(program)} ${q(full)}` : `xdg-open ${q(full)}`;
           const cmd = `DISPLAY=:99 nohup ${viewer} >/tmp/open.log 2>&1 & echo "Opened ${full} with ${viewer} on :99"`;
           const out = await pc.exec(bot.id, cmd, 30);
           await pc.log(bot.id, 'command', `Opened ${full} on desktop`, { file: full });

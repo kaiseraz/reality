@@ -135,7 +135,7 @@ describe('correlate recipe and check', () => {
 describe('forecast backtest check', () => {
   // 30 months: 2022-11 … 2025-04, value = 100 + month index.
   const months = Array.from({ length: 30 }, (_, i) => {
-    const d = new Date(Date.UTC(2024, i, 1));
+    const d = new Date(Date.UTC(2022, 10 + i, 1));
     return { date: d.toISOString().slice(0, 10), v: 100 + i };
   });
   const raw = 'month,sales\n' + months.map((m) => `${m.date},${m.v}`).join('\n') + '\n';
@@ -146,9 +146,9 @@ describe('forecast backtest check', () => {
     'month,kind,sales,lower,upper',
     ...months.map((m) => `${m.date},actual,${m.v},,`),
     ...months.slice(-H).map((m) => `${m.date},backtest,${m.v + 1},,`),
-    '2025-04-23,forecast,130,128,132',
-    '2025-05-24,forecast,131,129,133',
-    '2025-06-24,forecast,132,130,134',
+    '2025-05-01,forecast,130,128,132',
+    '2025-06-01,forecast,131,129,133',
+    '2025-07-01,forecast,132,130,134',
   ];
   const resultCsv = rows.join('\n') + '\n';
   const claim = { backtest_mae: 1, naive_mae: 2, beats_naive: true };
@@ -180,16 +180,16 @@ describe('forecast backtest check', () => {
 
   it('accepts recent history only, but not an older slice passed off as recent', async () => {
     const csv = (keep: (r: string) => boolean) => rows.filter(keep).join('\n') + '\n';
-    const recent = csv((r) => !/^2024-0[1-6]-01,actual/.test(r));
+    const recent = csv((r) => !/^(2022-1[12]|2023-0[1-4])-01,actual/.test(r));
     expect((await verify(taskId, recent, claim, check)).status).toBe('passed');
-    const older = csv((r) => !/^2025-03-24,actual/.test(r));
+    const older = csv((r) => !/^2025-04-01,actual/.test(r));
     const r = await verify(taskId, older, claim, check);
     expect(r.status).toBe('failed');
     expect(JSON.stringify(r.evidence)).toContain('most recent');
   }, 60_000);
 
   it('catches altered history', async () => {
-    const altered = resultCsv.replace('2022-12-23,actual,102', '2022-12-23,actual,999');
+    const altered = resultCsv.replace('2023-01-01,actual,102', '2023-01-01,actual,999');
     expect((await verify(taskId, altered, claim, check)).status).toBe('failed');
   }, 60_000);
 });

@@ -36,6 +36,20 @@ export const WORKSPACE = '/home/gem/workspace';
 /** Where a chat's bots share their work; one volume per owner, one folder per chat. */
 export const PROJECTS = '/home/gem/projects';
 export const projectFolder = (chatId: string) => `${PROJECTS}/${chatId.slice(0, 8)}`;
+/** The bot's home on its computer, where its shell's ~ points. */
+export const HOME = '/home/gem';
+
+/**
+ * A path a bot gives, as the computer sees it: ~ is the home as in the bot's shell, a bare
+ * name lies in the workspace. "~/workspace/x" must not become "workspace/~/workspace/x".
+ */
+export function computerPath(p: string): string {
+  const clean = p.trim();
+  if (!clean) throw new ComputerError('A path is required.');
+  if (clean === '~') return HOME;
+  if (clean.startsWith('~/')) return `${HOME}/${clean.slice(2)}`;
+  return clean.startsWith('/') ? clean : `${WORKSPACE}/${clean}`;
+}
 
 /**
  * Copies what changed in a project folder out of the shared volume, for the server to place. It
@@ -823,9 +837,7 @@ export class BotComputers {
   }
 
   private path(p: string): string {
-    const clean = p.trim();
-    if (!clean) throw new ComputerError('A path is required.');
-    return clean.startsWith('/') ? clean : `${WORKSPACE}/${clean}`;
+    return computerPath(p);
   }
 
   async readFile(botId: string, path: string): Promise<string> {
@@ -1038,9 +1050,20 @@ export class BotComputers {
     'archive.ubuntu.com',
     'security.ubuntu.com',
     'ppa.launchpad.net',
+    // Where Launchpad serves PPA files today; apt-get update warns on every run without it.
+    'ppa.launchpadcontent.net',
     'keyserver.ubuntu.com',
     'deb.debian.org',
     'storage.googleapis.com',
+    // The registries other fields install from: conda-forge and bioconda, R, Rust, Go, Java.
+    'conda.anaconda.org',
+    'cloud.r-project.org',
+    'bioconductor.org',
+    'crates.io',
+    'static.crates.io',
+    'index.crates.io',
+    'proxy.golang.org',
+    'repo1.maven.org',
   ] as const;
 
   async allowed(botId: string): Promise<string[]> {

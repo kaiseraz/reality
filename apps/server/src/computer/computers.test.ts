@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { isBackgroundHost, normalizeDomain } from './computers.ts';
+import { computerPath, isBackgroundHost, normalizeDomain } from './computers.ts';
+import { viewerFor } from '../chat/tools.ts';
+
+describe('paths and programs on a bot computer', () => {
+  it('reads ~ as the home of the bot shell, and a bare name as the workspace', () => {
+    expect(computerPath('~/workspace/show.pml')).toBe('/home/gem/workspace/show.pml');
+    expect(computerPath('~')).toBe('/home/gem');
+    expect(computerPath('show.pml')).toBe('/home/gem/workspace/show.pml');
+    expect(computerPath(' /tmp/a.txt ')).toBe('/tmp/a.txt');
+    expect(() => computerPath('  ')).toThrow();
+  });
+
+  it('opens each file type in its program, and a program the bot names for anything else', () => {
+    expect(viewerFor('/x/board.kicad_pcb')).toBe('pcbnew');
+    expect(viewerFor('/x/engine.STEP')).toBe('freecad');
+    expect(viewerFor('/x/1TCA.pdb')).toBe('pymol');
+    expect(viewerFor('/x/ligand.sdf')).toBe('pymol');
+    expect(viewerFor('/x/notes.txt')).toBeNull();
+    expect(viewerFor('/x/rivers.geojson', 'qgis')).toBe('qgis');
+  });
+});
 
 describe('bot computer access rules', () => {
   it('accepts plain domains and strips schemes, paths, ports and www', () => {
