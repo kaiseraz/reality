@@ -81,6 +81,10 @@ rem --- Computer der Bots ------------------------------------------------------
 rem Scheitert der Download, startet Reality trotzdem: nur die Computer fehlen dann.
 set "COMPUTER_IMG=ghcr.io/agent-infra/sandbox:1.11.0"
 if exist ".env" for /f "tokens=1,* delims==" %%a in ('findstr /b "COMPUTER_IMAGE=" ".env"') do set "COMPUTER_IMG=%%b"
+rem Ein schon gebautes Image bekommt Aenderungen am Bauplan; ohne Aenderung dauert das Sekunden.
+if /i "%COMPUTER_IMG%"=="reality-computer:dev" (
+  docker image inspect reality-computer:dev >nul 2>nul && docker build -q -t reality-computer:dev sandbox/computer >nul
+)
 docker image inspect "%COMPUTER_IMG%" >nul 2>nul
 if not errorlevel 1 goto computer_ok
 echo   Erster Start: Computer der Bots mit KiCad und FreeCAD werden gebaut, einmalig etwa 12 GB ...
