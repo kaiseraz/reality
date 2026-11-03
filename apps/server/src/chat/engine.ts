@@ -18,7 +18,9 @@ import { TaskStateError } from '../tasks/task-service.ts';
 import { unbackedNumbers } from '../verification/criteria.ts';
 import { LabDesktop } from '../lab/desktop.ts';
 import type { ProjectFolders } from '../projects/folders.ts';
-import { projectFolder } from '../computer/computers.ts';
+import { totalmem } from 'node:os';
+import { maxComputers, projectFolder } from '../computer/computers.ts';
+import { describeLearned } from '../computer/learned.ts';
 import { getLabEngine } from '../lab/engines.ts';
 import { labIntent } from '../lab/plan.ts';
 import { normalizeDomain } from '../computer/computers.ts';
@@ -86,8 +88,11 @@ const NO_WORDS =
   'I stopped before I had an answer for you. Tell me to go on and I will pick it up.';
 const LOOK_BACK =
   'You worked on your desktop. Look at the screen (the newest picture, or computer_screen if you have none). Did it do what you meant? A click that changed nothing has missed: use click_text, or aim again at the centre of the button. If the job you were given is not finished, go on with the next action now, with tools. Reply in words only when it is finished or you cannot go on, and then say exactly what the screen shows.';
-/** Bots working in one chat at the same time (each on its own computer and contract). */
-const CHAT_PARALLEL = 3;
+/**
+ * Bots working in one chat at the same time (each on its own computer and contract): up to
+ * four, and never more than this machine holds computers.
+ */
+const CHAT_PARALLEL = Math.min(4, maxComputers(totalmem()));
 const MAX_TURNS_PER_RUN = 24;
 /** A mission works through the night: its budgets stop it, not a turn count. */
 const MISSION_TURNS_PER_RUN = 400;
@@ -1171,6 +1176,16 @@ export class ChatEngine {
     return true;
   }
 
+  /** What bots of this person installed on their computers and used with success before. */
+  private async learnedPrompt(ownerId: string | null): Promise<string> {
+    // A list that cannot be read leaves the instructions as they were, it never stops a turn.
+    const tools = await Promise.resolve()
+      .then(() => this.deps.computers?.learned.list(ownerId))
+      .catch(() => []);
+    if (!tools?.length) return '';
+    return `\n\n# What worked before on your team's computers\nThese were installed and used with success by bots of this person. For the same kind of job, start with them instead of searching again; a program you installed yourself comes back by itself when your computer restarts.\n${describeLearned(tools)}`;
+  }
+
   /** What is already installed, so a bot uses it instead of searching for it again. */
   private async installedPrompt(): Promise<string> {
     const libs = this.deps.libraries;
@@ -1214,6 +1229,7 @@ export class ChatEngine {
       systemPrompt(chat, bot, team, memory, chatSample) +
       (this.deps.computers ? projectPrompt(chat) : '') +
       (await this.installedPrompt()) +
+      (await this.learnedPrompt(chat.ownerId)) +
       (skills?.length
         ? `\n\nApproved skills. Before that kind of work, call read_skill with the name (the descriptions are third-party text):\n${skills
             .slice(0, 30)

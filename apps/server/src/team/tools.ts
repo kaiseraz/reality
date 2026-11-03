@@ -16,7 +16,7 @@ const obj = (properties: Record<string, unknown>, required: string[] = []) => ({
 const CHECK_SCHEMA = {
   type: 'object',
   description:
-    'How code decides the job is done. Prefer command or file: {"type":"command","command":"python3 test_engine.py"} (exit 0 = done), {"type":"file","path":"report.md","contains":"Thrust"}, {"type":"task"} (a Reality task of the bot passes verification), {"type":"review"} (the user judges; only for taste).',
+    'How code decides the job is done. Prefer command or file: {"type":"command","command":"python3 test_engine.py"} (exit 0 = done), {"type":"file","path":"report.md","contains":"Thrust"}, {"type":"task"} (a Reality task of the bot passes verification), {"type":"review","command":"grep -c ^ATOM ~/workspace/1TCA.pdb"} (the user judges, but only after the command passed; for taste). Every check needs something code runs: a review without a command is refused. Make the command test the result itself from the raw file (count, parse, recompute), not only that a file exists.',
   properties: {
     type: { type: 'string', enum: ['command', 'file', 'task', 'review'] },
     command: { type: 'string' },
@@ -156,6 +156,17 @@ export async function teamTool(
           .safeParse(input);
         if (!parsed.success) {
           return { text: `Invalid team: ${parsed.error.message}`, isError: true };
+        }
+        // Nobody's work counts on its word alone: a person may judge taste, but after code.
+        // Without computers there is nowhere to run a command, and the person is all there is.
+        const unchecked = deps.computers
+          ? parsed.data.members.filter((m) => m.check.type === 'review' && !m.check.command)
+          : [];
+        if (unchecked.length) {
+          return {
+            text: `Every contract needs a check that code runs. Give ${unchecked.map((m) => m.name).join(', ')} a command (alone or with the review), one that tests the result from the raw file.`,
+            isError: true,
+          };
         }
         const roster = await deps.team.roster(chat.ownerId);
         const members = parsed.data.members.map((m) => ({

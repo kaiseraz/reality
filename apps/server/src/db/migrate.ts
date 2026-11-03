@@ -591,6 +591,23 @@ const MIGRATIONS: readonly { id: string; sql: string }[] = [
       ALTER TABLE chats ADD COLUMN host_folder text;
     `,
   },
+  {
+    id: '0024_learned_tools',
+    sql: `
+      -- Programs and packages a bot installed and used successfully, per person: the next bot
+      -- that needs the same field starts from what worked instead of from nothing.
+      CREATE TABLE learned_tools (
+        owner_key   text NOT NULL,
+        manager     text NOT NULL,
+        package     text NOT NULL,
+        program     text,
+        opens       text[] NOT NULL DEFAULT '{}',
+        uses        integer NOT NULL DEFAULT 1,
+        last_used   timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (owner_key, manager, package)
+      );
+    `,
+  },
 ];
 
 export async function migrate(pool: pg.Pool): Promise<string[]> {

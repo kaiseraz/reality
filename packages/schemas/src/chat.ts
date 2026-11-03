@@ -85,7 +85,8 @@ export const ContractCheck = z.discriminatedUnion('type', [
     contains: z.string().max(200).optional(),
   }),
   z.object({ type: z.literal('task') }),
-  z.object({ type: z.literal('review') }),
+  // A person decides, after code: the command runs first, and only work that passes it is shown.
+  z.object({ type: z.literal('review'), command: z.string().min(1).max(2000).optional() }),
 ]);
 export type ContractCheck = z.infer<typeof ContractCheck>;
 

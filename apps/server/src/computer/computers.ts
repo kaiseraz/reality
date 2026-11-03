@@ -3,6 +3,14 @@ import { readFile } from 'node:fs/promises';
 import { totalmem } from 'node:os';
 import type pg from 'pg';
 import { docker } from './docker.ts';
+import {
+  installLine,
+  installsIn,
+  LearnedTools,
+  parseInstallLines,
+  restoreCommands,
+  type Install,
+} from './learned.ts';
 
 /**
  * Bot computers: every bot gets its own Linux computer (an open-source sandbox image, see
@@ -28,9 +36,12 @@ const SLOTS = 16;
 const IDLE_MS = 4 * 60 * 60_000;
 /** A computer used this recently is in use. */
 const IN_USE_MS = 2 * 60_000;
-/** How many computers a machine holds: 6 GB for itself and Docker, about 2 GB each. */
+/**
+ * How many computers a machine holds: 6 GB for itself and Docker, 1.5 GB each (three at work
+ * with KiCad, FreeCAD and PyMOL took 3.3 GB together), and no more than there are slots.
+ */
 export const maxComputers = (totalBytes: number) =>
-  Math.max(2, Math.floor((totalBytes / 1024 ** 3 - 6) / 2));
+  Math.min(SLOTS, Math.max(2, Math.floor((totalBytes / 1024 ** 3 - 6) / 1.5)));
 /** The bot's home folder, kept in its own volume. */
 export const WORKSPACE = '/home/gem/workspace';
 /** Where a chat's bots share their work; one volume per owner, one folder per chat. */
@@ -40,6 +51,10 @@ export const projectFolder = (chatId: string) => `${PROJECTS}/${chatId.slice(0, 
 const DIRECT_EXEC_S = 45;
 /** The bot's home on its computer, where its shell's ~ points. */
 export const HOME = '/home/gem';
+/** What a bot installed, kept in its workspace volume so a restarted computer gets it back. */
+const TOOLS_FILE = `${WORKSPACE}/.reality/tools.txt`;
+/** apt's package lists and downloaded packages live in the volume too: a restore needs no download. */
+const APT_DIR = `${WORKSPACE}/.reality/apt`;
 
 /**
  * A path a bot gives, as the computer sees it: ~ is the home as in the bot's shell, a bare
@@ -189,6 +204,33 @@ export class BotComputers {
     private readonly config: ComputerConfig,
   ) {
     this.gateway = `reality-gateway-${config.namespace}`;
+    this.learned = new LearnedTools(pool);
+  }
+
+  /** What bots installed and used with success, per person. */
+  readonly learned: LearnedTools;
+
+  /**
+   * apt through the gateway's proxy (the computer has no internet of its own), with its lists
+   * and packages in the workspace volume, so what a bot installed comes back without a download.
+   */
+  private aptSetupCommand(): string {
+    const proxy = `http://${this.gateway}:3128`;
+    const conf = [
+      `Acquire::http::Proxy "${proxy}";`,
+      `Acquire::https::Proxy "${proxy}";`,
+      `Dir::Cache::Archives "${APT_DIR}/archives/";`,
+      `Dir::State::Lists "${APT_DIR}/lists/";`,
+      'APT::Keep-Downloaded-Packages "true";',
+      '',
+    ].join('\n');
+    const b64 = Buffer.from(conf, 'utf8').toString('base64');
+    return (
+      // The folder above stays the bot's: it keeps its tool list and desktop settings there.
+      `sudo mkdir -p ${APT_DIR}/archives/partial ${APT_DIR}/lists/partial && ` +
+      `sudo chown gem:gem ${WORKSPACE}/.reality && ` +
+      `printf %s ${b64} | base64 -d | sudo tee /etc/apt/apt.conf.d/99reality >/dev/null`
+    );
   }
 
   private containerOf(botId: string) {
@@ -298,10 +340,7 @@ export class BotComputers {
         live,
         'POST',
         '/v1/shell/exec',
-        {
-          command: `sudo bash -c 'printf "Acquire::http::Proxy \\"http://${this.gateway}:3128\\";\\nAcquire::https::Proxy \\"http://${this.gateway}:3128\\";\\n" > /etc/apt/apt.conf.d/99reality'`,
-          timeout: 10,
-        },
+        { command: this.aptSetupCommand(), timeout: 10 },
         15_000,
       ).catch(() => undefined);
       slot++;
@@ -656,16 +695,14 @@ export class BotComputers {
         live,
         'POST',
         '/v1/shell/exec',
-        {
-          command: `sudo bash -c 'printf "Acquire::http::Proxy \\"http://${this.gateway}:3128\\";\\nAcquire::https::Proxy \\"http://${this.gateway}:3128\\";\\n" > /etc/apt/apt.conf.d/99reality'`,
-          timeout: 10,
-        },
+        { command: this.aptSetupCommand(), timeout: 10 },
         15_000,
       ).catch(() => null);
     } catch {
       // Non-fatal: pip still works, apt will be fixed on next boot.
     }
     await this.seedHome(live);
+    await this.restoreTools(botId, live);
     await this.log(botId, 'power', 'Computer started', {});
     return live;
   }
@@ -835,6 +872,12 @@ export class BotComputers {
       timeoutS > DIRECT_EXEC_S
         ? await this.execDetached(l, command, timeoutS)
         : await this.execDirect(l, command, timeoutS);
+    if (exitCode === 0) {
+      const got = installsIn(command);
+      if (got.length) {
+        await this.rememberInstalls(botId, l, got).catch(() => undefined);
+      }
+    }
     const blocked = await this.deniedSince(l.container, mark);
     if (show !== false) {
       await this.log(botId, 'command', (show ?? command).slice(0, 300), {
@@ -844,6 +887,38 @@ export class BotComputers {
       });
     }
     return { output, exitCode, blocked };
+  }
+
+  /** Notes what a bot installed: in its workspace for the next start, and for the next bot. */
+  private async rememberInstalls(botId: string, l: Live, installs: Install[]): Promise<void> {
+    const add = installs
+      .map(installLine)
+      .map((x) => `grep -qxF '${x}' ${TOOLS_FILE} || echo '${x}' >> ${TOOLS_FILE}`)
+      .join('; ');
+    await this.execDirect(l, `mkdir -p ${WORKSPACE}/.reality && touch ${TOOLS_FILE}; ${add}`, 15);
+    await this.learned.installed(await this.ownerOf(botId), installs);
+  }
+
+  /**
+   * A computer starts from the image, so what its bot installed is gone; the list in the volume
+   * brings it back before the bot gets the computer, from apt's packages kept there.
+   */
+  private async restoreTools(botId: string, live: Live): Promise<void> {
+    const list = await this.execDirect(live, `cat ${TOOLS_FILE} 2>/dev/null`, 15).catch(() => null);
+    const installs = parseInstallLines(list?.output ?? '');
+    if (!installs.length) return;
+    const out = await this.execDetached(live, restoreCommands(installs).join('; '), 300).catch(
+      () => null,
+    );
+    const back = [...(out?.output ?? '').matchAll(/^restored (\S+)$/gm)].map((m) => m[1]);
+    await this.log(
+      botId,
+      'command',
+      back.length
+        ? `Installed again what it had installed before: ${back.join(', ')}`
+        : 'Could not install again what it had installed before',
+      { output: (out?.output ?? '').slice(-2000) },
+    );
   }
 
   private async execDirect(l: Live, command: string, timeoutS: number) {

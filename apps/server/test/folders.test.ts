@@ -12,8 +12,8 @@ import { folderName, folderProblem, ProjectFolders, targetIn } from '../src/proj
 describe('computers on one machine', () => {
   it('leaves room for the machine itself', () => {
     expect(maxComputers(8 * 1024 ** 3)).toBe(2);
-    expect(maxComputers(15.8 * 1024 ** 3)).toBe(4);
-    expect(maxComputers(32 * 1024 ** 3)).toBe(13);
+    expect(maxComputers(15.8 * 1024 ** 3)).toBe(6);
+    expect(maxComputers(32 * 1024 ** 3)).toBe(16);
   });
 });
 

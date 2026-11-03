@@ -1341,6 +1341,13 @@ ${out.output.slice(-8000) || '(no output)'}${blocked}`,
           const cmd = `DISPLAY=:99 nohup ${viewer} >/tmp/open.log 2>&1 & echo "Opened ${full} with ${viewer} on :99"`;
           const out = await pc.exec(bot.id, cmd, 30);
           await pc.log(bot.id, 'command', `Opened ${full} on desktop`, { file: full });
+          // Which program showed which kind of file goes to the list the next bot starts from.
+          if (program) {
+            const ext = /\.([a-z0-9]{1,10})$/.exec(lower)?.[1] ?? '';
+            await Promise.resolve()
+              .then(() => pc.learned.opened(chat.ownerId, program, ext))
+              .catch(() => undefined);
+          }
           return { text: out.output.slice(-2000) || `Opened ${full} live on the desktop.` };
         }
         const url = str(input.url, 2000);

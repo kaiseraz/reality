@@ -82,7 +82,9 @@ export function describeCheck(c: ContractCheck): string {
     case 'task':
       return 'a Reality task it started passes independent verification';
     case 'review':
-      return 'you accept it';
+      return c.command
+        ? `\`${c.command}\` exits 0 on its computer, and then you accept it`
+        : 'you accept it';
   }
 }
 
@@ -262,8 +264,10 @@ export class TeamService {
       passed: false,
       detail: `The check could not run: ${err instanceof Error ? err.message : String(err)}`,
     }));
-    if (c.check.type === 'review') {
-      await this.close(c, 'review', summary.slice(0, 1000));
+    // A review whose code check fails is not shown to the person: the bot fixes it first.
+    if (c.check.type === 'review' && (!c.check.command || result.passed)) {
+      const checked = c.check.command ? `Code check: ${result.detail}. ` : '';
+      await this.close(c, 'review', `${checked}${summary}`.slice(0, 1000));
       return 'Handed in. The person reviews it now; wait for their decision.';
     }
     if (result.passed) {
@@ -281,16 +285,18 @@ export class TeamService {
 
   private async runCheck(c: Contract, bot: BotView): Promise<{ passed: boolean; detail: string }> {
     const pc = this.deps.computers;
+    const command = async (cmd: string) => {
+      if (!pc) return { passed: false, detail: 'no computer available to run the check' };
+      const out = await pc.exec(bot.id, cmd, 300);
+      const tail = out.output.trim().split('\n').slice(-3).join(' ').slice(0, 300);
+      return {
+        passed: out.exitCode === 0,
+        detail: `\`${cmd}\` exited ${out.exitCode}${tail ? ` (${tail})` : ''}`,
+      };
+    };
     switch (c.check.type) {
-      case 'command': {
-        if (!pc) return { passed: false, detail: 'no computer available to run the check' };
-        const out = await pc.exec(bot.id, c.check.command, 300);
-        const tail = out.output.trim().split('\n').slice(-3).join(' ').slice(0, 300);
-        return {
-          passed: out.exitCode === 0,
-          detail: `\`${c.check.command}\` exited ${out.exitCode}${tail ? ` (${tail})` : ''}`,
-        };
-      }
+      case 'command':
+        return command(c.check.command);
       case 'file': {
         if (!pc) return { passed: false, detail: 'no computer available to run the check' };
         // A path without a place means the chat's project folder, not the bot's own.
@@ -329,7 +335,9 @@ export class TeamService {
         return { passed: false, detail: 'no task of yours has passed verification yet' };
       }
       case 'review':
-        return { passed: false, detail: 'waits for the person' };
+        return c.check.command
+          ? command(c.check.command)
+          : { passed: false, detail: 'waits for the person' };
     }
   }
 
