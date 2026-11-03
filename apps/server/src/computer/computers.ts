@@ -36,6 +36,8 @@ export const WORKSPACE = '/home/gem/workspace';
 /** Where a chat's bots share their work; one volume per owner, one folder per chat. */
 export const PROJECTS = '/home/gem/projects';
 export const projectFolder = (chatId: string) => `${PROJECTS}/${chatId.slice(0, 8)}`;
+/** Commands up to this long run in one request; longer ones in the background (see execDetached). */
+const DIRECT_EXEC_S = 45;
 /** The bot's home on its computer, where its shell's ~ points. */
 export const HOME = '/home/gem';
 
@@ -172,6 +174,8 @@ export class BotComputers {
   private gatewayToken = '';
   private gatewayReady: Promise<void> | null = null;
   private starting = new Map<string, Promise<Live>>();
+  /** Slots taken by computers still starting: two starting at once must not share a port. */
+  private reserved = new Set<number>();
   private lastEvent = 0;
   private timer: NodeJS.Timeout | null = null;
   private reported = new Map<string, number>();
@@ -552,10 +556,13 @@ export class BotComputers {
       return adopted;
     }
     await this.makeRoom();
+    // Picked and reserved in one step, with no await between: a second computer starting
+    // meanwhile would otherwise take the same slot, and each bot's commands would reach the
+    // other's computer, which refuses its key (401).
     const used = new Set([...this.live.values()].map((x) => x.slot));
     let slot = 0;
     for (let i = 0; i < SLOTS; i++) {
-      if (!used.has(FIRST_SLOT + i)) {
+      if (!used.has(FIRST_SLOT + i) && !this.reserved.has(FIRST_SLOT + i)) {
         slot = FIRST_SLOT + i;
         break;
       }
@@ -564,6 +571,15 @@ export class BotComputers {
     if (!slot || !port) {
       throw new ComputerError('All computer slots are in use; stop an idle one first.');
     }
+    this.reserved.add(slot);
+    try {
+      return await this.startIn(botId, slot, port);
+    } finally {
+      this.reserved.delete(slot);
+    }
+  }
+
+  private async startIn(botId: string, slot: number, port: number): Promise<Live> {
     const container = this.containerOf(botId);
     const key = randomBytes(24).toString('hex');
     await this.run(['rm', '-f', container], 30_000);
@@ -815,16 +831,10 @@ export class BotComputers {
   ): Promise<{ output: string; exitCode: number; blocked: string[] }> {
     const l = await this.ensure(botId);
     const mark = await this.cursor();
-    const res = await this.api(
-      l,
-      'POST',
-      '/v1/shell/exec',
-      { command, exec_dir: WORKSPACE, timeout: timeoutS, hard_timeout: timeoutS },
-      (timeoutS + 15) * 1000,
-    );
-    const data = (res.data ?? {}) as { output?: string; exit_code?: number | null };
-    const output = String(data.output ?? '');
-    const exitCode = typeof data.exit_code === 'number' ? data.exit_code : 1;
+    const { output, exitCode } =
+      timeoutS > DIRECT_EXEC_S
+        ? await this.execDetached(l, command, timeoutS)
+        : await this.execDirect(l, command, timeoutS);
     const blocked = await this.deniedSince(l.container, mark);
     if (show !== false) {
       await this.log(botId, 'command', (show ?? command).slice(0, 300), {
@@ -834,6 +844,55 @@ export class BotComputers {
       });
     }
     return { output, exitCode, blocked };
+  }
+
+  private async execDirect(l: Live, command: string, timeoutS: number) {
+    const res = await this.api(
+      l,
+      'POST',
+      '/v1/shell/exec',
+      { command, exec_dir: WORKSPACE, timeout: timeoutS, hard_timeout: timeoutS },
+      (timeoutS + 15) * 1000,
+    );
+    const data = (res.data ?? {}) as { output?: string; exit_code?: number | null };
+    return {
+      output: String(data.output ?? ''),
+      exitCode: typeof data.exit_code === 'number' ? data.exit_code : 1,
+    };
+  }
+
+  /**
+   * A long command (an install, a build) runs in the background and is asked after: the
+   * computer's web server cuts every request after about a minute (504), however long the
+   * command may take. Exit code 124 when it ran out of time, as with timeout(1).
+   */
+  private async execDetached(l: Live, command: string, timeoutS: number) {
+    const base = `/tmp/reality-run-${randomBytes(6).toString('hex')}`;
+    const script = Buffer.from(command, 'utf8').toString('base64');
+    await this.execDirect(
+      l,
+      `printf %s ${script} | base64 -d > ${base}.sh && ` +
+        `(setsid bash -c 'cd ${WORKSPACE}; bash ${base}.sh > ${base}.out 2>&1; echo $? > ${base}.code' ` +
+        `>/dev/null 2>&1 & echo $! > ${base}.pid)`,
+      20,
+    );
+    const deadline = Date.now() + timeoutS * 1000;
+    let code: number | null = null;
+    while (code === null && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const seen = await this.execDirect(l, `cat ${base}.code 2>/dev/null`, 15).catch(() => null);
+      const n = Number.parseInt(seen?.output.trim() ?? '', 10);
+      if (Number.isInteger(n)) code = n;
+    }
+    if (code === null) {
+      await this.execDirect(l, `kill -- -$(cat ${base}.pid) 2>/dev/null; true`, 15).catch(
+        () => null,
+      );
+    }
+    const out = await this.execDirect(l, `tail -c 200000 ${base}.out; rm -f ${base}.*`, 20);
+    return code === null
+      ? { output: `${out.output}\n(stopped after ${timeoutS} s)`, exitCode: 124 }
+      : { output: out.output, exitCode: code };
   }
 
   private path(p: string): string {
