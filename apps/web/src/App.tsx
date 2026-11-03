@@ -197,13 +197,6 @@ export function App({
     () => [
       { id: 'new', group: 'Actions', label: 'New chat with your lead', icon: 'plus', run: newTask },
       {
-        id: 'new-project',
-        group: 'Actions',
-        label: 'New project (long-term goal)',
-        icon: 'command',
-        run: () => go({ page: 'new-project' }),
-      },
-      {
         id: 'bots',
         group: 'Actions',
         label: 'Manage bots',
@@ -223,20 +216,6 @@ export function App({
         label: 'Open pages',
         icon: 'file',
         run: () => go({ page: 'pages' }),
-      },
-      {
-        id: 'missions',
-        group: 'Actions',
-        label: 'Open missions (overnight research)',
-        icon: 'target',
-        run: () => go({ page: 'missions' }),
-      },
-      {
-        id: 'routines',
-        group: 'Actions',
-        label: 'Open routines (scheduled tasks)',
-        icon: 'clock',
-        run: () => go({ page: 'routines' }),
       },
       {
         id: 'caps',
@@ -364,13 +343,7 @@ export function App({
           ) : route.page === 'team' && user?.role === 'admin' ? (
             <TeamPage />
           ) : (
-            <Home
-              health={health}
-              healthError={healthError}
-              onStart={start}
-              focusKey={focusKey}
-              onNewProject={() => go({ page: 'new-project' })}
-            />
+            <Home health={health} healthError={healthError} onStart={start} focusKey={focusKey} />
           )}
         </Suspense>
       </main>

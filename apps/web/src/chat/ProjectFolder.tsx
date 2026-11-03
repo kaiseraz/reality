@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type FolderListing, type FolderStatus } from '../api.ts';
 import { Icon } from '../ui/Icon.tsx';
+import { FileTree } from './FileTree.tsx';
 
 const nameOf = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 const sizeOf = (bytes: number) =>
@@ -231,16 +232,16 @@ export function FilesPanel({ chatId, onChange }: { chatId: string; onChange: () 
       {status.files.length === 0 ? (
         <p className="muted">Nothing here yet. Finished work appears as the bots make it.</p>
       ) : (
-        <ul className="files-list">
-          {status.files.map((f) => (
-            <li key={f.path} title={STATE[f.state] || f.path}>
-              <Icon name="file" size={14} />
-              <span className="files-name">{f.path}</span>
+        <FileTree
+          files={status.files}
+          title={(f) => STATE[f.state] || f.path}
+          aside={(f) => (
+            <>
               {STATE[f.state] && <span className="pc-needs">{STATE[f.state]}</span>}
-              <span className="muted small">{sizeOf(f.size)}</span>
-            </li>
-          ))}
-        </ul>
+              <span className="muted small tree-size">{sizeOf(f.size)}</span>
+            </>
+          )}
+        />
       )}
     </div>
   );

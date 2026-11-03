@@ -16,6 +16,7 @@ import type { Mount, RunInput } from '../sandbox/docker-runner.ts';
 import { namedPackage, validName, normalizeName } from '../capabilities/search.ts';
 import { validSecretName } from '../capabilities/secrets.ts';
 import type { SkillService } from '../capabilities/skills.ts';
+import { RoutineInput, type RoutineService } from '../routines/routines.ts';
 import type { LabPresets } from '../lab/plan.ts';
 import type { FileStore } from '../artifacts/file-store.ts';
 import {
@@ -357,6 +358,47 @@ export const TOOLS: ToolSpec[] = [
     ),
   },
   {
+    name: 'create_routine',
+    description:
+      'Sets up work that repeats on a schedule, when the person asks for it ("every Monday at 8 check …", "/routine …"). Each run is a verified Reality task with the request as its question; results come to this chat. Pick the schedule from their words; times are local to the server.',
+    input_schema: obj(
+      {
+        name: { type: 'string', description: 'A short name, e.g. "Weekly bike check"' },
+        request: { type: 'string', description: 'What each run does, as a question or job' },
+        schedule: {
+          type: 'object',
+          description:
+            '{"type":"daily","time":"08:00"}, {"type":"weekdays","time":"08:00"}, {"type":"weekly","time":"08:00","day":1} (0 Sunday … 6 Saturday), or {"type":"interval","minutes":60} (15 or more)',
+          properties: {
+            type: { type: 'string', enum: ['daily', 'weekdays', 'weekly', 'interval'] },
+            time: { type: 'string' },
+            day: { type: 'integer' },
+            minutes: { type: 'integer' },
+          },
+          required: ['type'],
+        },
+        autoApprove: {
+          type: 'boolean',
+          description: 'Run plans that code can check fully without asking each time',
+        },
+      },
+      ['name', 'request', 'schedule'],
+    ),
+  },
+  {
+    name: 'list_routines',
+    description: 'Lists the routines of this person: name, schedule, next run, on or off.',
+    input_schema: obj({}, []),
+  },
+  {
+    name: 'stop_routine',
+    description: 'Stops a routine by its name (it is kept, switched off), or deletes it.',
+    input_schema: obj(
+      { name: { type: 'string' }, remove: { type: 'boolean', description: 'Delete it entirely' } },
+      ['name'],
+    ),
+  },
+  {
     name: 'check_work',
     description:
       'Proves what you made on your computer before you report it: Reality itself runs the command on your computer and puts what it showed into the chat for the person, so your word is not all there is. Make the command test the result from the raw file (count the atoms of a structure, parse the output, recompute a number, run the program on it), not only that a file exists. Exit 0 means it holds. Report only what passed, and say what the check showed.',
@@ -554,6 +596,9 @@ export const TOOL_PRESENCE: Record<string, ['working' | 'searching' | 'reading',
   recheck_board: ['working', 'checks the edited board'],
   ask_access: ['working', 'opens web access'],
   check_work: ['working', 'checks its work'],
+  create_routine: ['working', 'sets up a routine'],
+  list_routines: ['working', 'looks at the routines'],
+  stop_routine: ['working', 'stops a routine'],
 };
 
 export interface ToolDeps extends AttachDeps {
@@ -570,6 +615,8 @@ export interface ToolDeps extends AttachDeps {
   libraries?: CapabilityResolver;
   /** Know-how from GitHub, usable once a person approved it. */
   skills?: SkillService;
+  /** Work that repeats on a schedule, set up when the person asks for it in the chat. */
+  routines?: RoutineService;
   readSample: (id: string) => Promise<{ filename: string; text: string } | undefined>;
   openAlexUrl?: string;
 }
@@ -1228,6 +1275,64 @@ export async function runTool(
       return {
         text: `"${title}" is open beside the chat (version ${earlier + 1}). The person sees it now.`,
       };
+    }
+
+    case 'create_routine':
+    case 'list_routines':
+    case 'stop_routine': {
+      const r = deps.routines;
+      if (!r) return { text: 'Routines are not available here.', isError: true };
+      const describe = (x: { schedule: Record<string, unknown> }) => {
+        const s = x.schedule;
+        return s.type === 'interval'
+          ? `every ${String(s.minutes)} min`
+          : s.type === 'weekly'
+            ? `every ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][Number(s.day)] ?? 'week'} at ${String(s.time)}`
+            : `${String(s.type)} at ${String(s.time)}`;
+      };
+      if (name === 'create_routine') {
+        const parsed = RoutineInput.safeParse({
+          name: str(input.name, 80),
+          request: str(input.request, 10_000),
+          schedule: input.schedule,
+          botId: bot.id,
+          autoApprove: input.autoApprove === true,
+        });
+        if (!parsed.success) {
+          return { text: `Not set up: ${parsed.error.message}`, isError: true };
+        }
+        const made = await r.create(chat.ownerId, parsed.data);
+        await deps.store.add(chat.id, {
+          role: 'system',
+          text: `Routine "${made.name}" set up: ${describe(made)}, next run ${made.nextRun ? new Date(made.nextRun).toLocaleString() : 'not planned'}.`,
+        });
+        return {
+          text: `Set up "${made.name}" (${describe(made)}). Next run: ${made.nextRun ?? 'none'}.`,
+        };
+      }
+      const all = await r.list(chat.ownerId);
+      if (name === 'list_routines') {
+        return {
+          text: all.length
+            ? all
+                .map(
+                  (x) =>
+                    `- ${x.name}: ${describe(x)}, ${x.enabled ? `next ${x.nextRun ?? '-'}` : 'off'}`,
+                )
+                .join('\n')
+            : 'No routines yet.',
+        };
+      }
+      const wanted = str(input.name, 80).trim().toLowerCase();
+      const one = all.find((x) => x.name.toLowerCase() === wanted);
+      if (!one) return { text: `No routine called "${str(input.name, 80)}".`, isError: true };
+      if (input.remove === true) await r.remove(one.id, chat.ownerId);
+      else await r.update(one.id, chat.ownerId, { enabled: false });
+      await deps.store.add(chat.id, {
+        role: 'system',
+        text: `Routine "${one.name}" ${input.remove === true ? 'deleted' : 'switched off'}.`,
+      });
+      return { text: `${input.remove === true ? 'Deleted' : 'Switched off'} "${one.name}".` };
     }
 
     case 'check_work': {

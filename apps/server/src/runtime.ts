@@ -406,8 +406,20 @@ export async function createRuntime(
           ...(overrides.log ? { log: overrides.log } : {}),
         })
       : null;
+  const routines = new RoutineService({
+    pool,
+    tasks,
+    artifacts,
+    events,
+    workspaces: ws,
+    pages,
+    readSample: sampleFile,
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
+
   const chatEngine = new ChatEngine({
     team,
+    routines,
     computers,
     folders,
     missions,
@@ -443,17 +455,6 @@ export async function createRuntime(
     usage,
     ...(overrides.log ? { log: overrides.log } : {}),
   });
-  const routines = new RoutineService({
-    pool,
-    tasks,
-    artifacts,
-    events,
-    workspaces: ws,
-    pages,
-    readSample: sampleFile,
-    ...(overrides.log ? { log: overrides.log } : {}),
-  });
-
   return {
     planner,
     events,

@@ -11,6 +11,7 @@ import { Card, isActionableCard } from './Cards.tsx';
 import { FolderChip } from './ProjectFolder.tsx';
 import type { VisualFocus } from './VisualPanel.tsx';
 import { Workbench } from './Workbench.tsx';
+import { CommandMenu, matchingCommands, parseCommand, startMission } from './commands.tsx';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -163,6 +164,18 @@ export function ChatView({
     const text = draft.trim();
     if (!text || busy) return;
     setDraft('');
+    // A mission is this team working on through the night, in a chat of its own.
+    const cmd = parseCommand(text);
+    if (cmd?.name === 'mission') {
+      await act(async () => {
+        const m = await startMission(
+          cmd.rest,
+          team.map((b) => b.id),
+        );
+        window.location.hash = `#/chat/${m.chatId}`;
+      });
+      return;
+    }
     await act(() => api.sendChat(state.id, text, sample || undefined));
     setSample('');
   };
@@ -306,6 +319,7 @@ export function ChatView({
             </p>
           )}
           <div className="composer">
+            <CommandMenu draft={draft} onPick={setDraft} />
             <label htmlFor="chat-input" className="sr-only">
               Message
             </label>
@@ -323,6 +337,12 @@ export function ChatView({
                 autoGrow(e.target);
               }}
               onKeyDown={(e) => {
+                const fits = matchingCommands(draft)[0];
+                if (fits && (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey))) {
+                  e.preventDefault();
+                  setDraft(`/${fits.name} `);
+                  return;
+                }
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   void send();

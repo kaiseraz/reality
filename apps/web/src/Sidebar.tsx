@@ -132,7 +132,7 @@ export function Sidebar({
   // Collapsed: a narrow rail with the essentials; the drawer on phones is always full.
   if (collapsed && !open) {
     const railNav: [Route['page'], Parameters<typeof Icon>[0]['name'], string][] = [
-      ['missions', 'target', 'Missions'],
+      ['capabilities', 'puzzle', 'Capabilities'],
       ['knowledge', 'book', 'Knowledge'],
       ['pages', 'file', 'Pages'],
     ];
@@ -357,7 +357,13 @@ export function Sidebar({
       </nav>
 
       <div className="sidebar-foot">
-        {nav('missions', 'target', 'Missions', route.page === 'missions')}
+        {nav(
+          'capabilities',
+          'puzzle',
+          'Capabilities',
+          route.page === 'capabilities',
+          capabilityCount !== null ? <span className="count">{capabilityCount}</span> : null,
+        )}
         {nav('knowledge', 'book', 'Knowledge', route.page === 'knowledge')}
         {nav('pages', 'file', 'Pages', route.page === 'pages' || route.page === 'doc')}
         <div className="menu-anchor">
@@ -373,16 +379,7 @@ export function Sidebar({
           </button>
           {menu === 'more' && (
             <div className="side-menu" role="menu">
-              {nav('routines', 'clock', 'Routines', route.page === 'routines')}
               {nav('bots', 'user', 'Manage bots', route.page === 'bots')}
-              {nav('new-project', 'folder', 'New project', route.page === 'new-project')}
-              {nav(
-                'capabilities',
-                'puzzle',
-                'Capabilities',
-                route.page === 'capabilities',
-                capabilityCount !== null ? <span className="count">{capabilityCount}</span> : null,
-              )}
               {user?.role === 'admin' && nav('team', 'lock', 'Accounts', route.page === 'team')}
             </div>
           )}

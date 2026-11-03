@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import type { BotView } from '@reality/schemas';
-import { api, type Health, type Sample } from './api.ts';
+import { api, type Health } from './api.ts';
 import { BotAvatar } from './bots/BotAvatar.tsx';
+import { BotFigure } from './bots/BotFigure.tsx';
+import { CommandMenu, matchingCommands, parseCommand, startMission } from './chat/commands.tsx';
 import { BrandMark, Icon } from './ui/Icon.tsx';
 
 export interface StartRequest {
@@ -42,30 +44,23 @@ export function Home({
   healthError,
   onStart,
   focusKey,
-  onNewProject,
 }: {
   health: Health | null;
   healthError: string | null;
   onStart: (r: StartRequest) => Promise<void>;
   /** Changes when "New task" is chosen, to focus the input. */
   focusKey: number;
-  onNewProject?: () => void;
 }) {
   const [draft, setDraft] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [samples, setSamples] = useState<Sample[]>([]);
   const [lead, setLead] = useState<BotView | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    api
-      .samples()
-      .then((s) => setSamples(Array.isArray(s) ? s : []))
-      .catch(() => setSamples([]));
     api
       .bots()
       .then((b) => setLead(Array.isArray(b) ? (b.find((x) => x.isMain) ?? b[0] ?? null) : null))
@@ -94,6 +89,19 @@ export function Home({
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
     if (!draft.trim() || submitting) return;
+    const cmd = parseCommand(draft);
+    if (cmd?.name === 'mission') {
+      setSubmitting('composer');
+      setSubmitError(null);
+      void startMission(cmd.rest, lead ? [lead.id] : [])
+        .then((m) => {
+          setDraft('');
+          window.location.hash = `#/chat/${m.chatId}`;
+        })
+        .catch((err: unknown) => setSubmitError(err instanceof Error ? err.message : String(err)))
+        .finally(() => setSubmitting(null));
+      return;
+    }
     void start({ request: draft.trim(), file: file ?? undefined }, 'composer');
   };
 
@@ -110,7 +118,11 @@ export function Home({
     <div className="home">
       <div className="home-inner">
         <div className="home-hero">
-          <BrandMark className="home-logo" />
+          {lead ? (
+            <BotFigure name={lead.name} main size={88} state="idle" />
+          ) : (
+            <BrandMark className="home-logo" />
+          )}
           <span className="home-word">Reality</span>
         </div>
         <p className="home-sub">{greeting()} How can I help?</p>
@@ -138,6 +150,7 @@ export function Home({
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
         >
+          <CommandMenu draft={draft} onPick={setDraft} />
           <label htmlFor="request" className="sr-only">
             What do you want to accomplish?
           </label>
@@ -152,6 +165,12 @@ export function Home({
               autoGrow(e.target);
             }}
             onKeyDown={(e) => {
+              const fits = matchingCommands(draft)[0];
+              if (fits && (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey))) {
+                e.preventDefault();
+                setDraft(`/${fits.name} `);
+                return;
+              }
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 submit();
@@ -225,30 +244,6 @@ export function Home({
             <Icon name="alert" />
             <span>Could not send that: {submitError}</span>
           </p>
-        )}
-
-        {samples.length > 0 && (
-          <div className="suggestions" aria-label="Examples with real data">
-            {samples.map((s) => (
-              <button
-                key={s.id}
-                className="suggestion"
-                disabled={submitting !== null}
-                title={`${s.question} (${s.source})`}
-                onClick={() => void start({ request: s.question, sample: s.id }, s.id)}
-              >
-                <Icon name="chart" size={15} />
-                <strong>{s.title}</strong>
-                {submitting === s.id && <span className="muted">starting…</span>}
-              </button>
-            ))}
-            {onNewProject && (
-              <button className="suggestion" onClick={onNewProject}>
-                <Icon name="folder" size={15} />
-                <strong>Start a long-term project</strong>
-              </button>
-            )}
-          </div>
         )}
 
         <p className="home-foot">

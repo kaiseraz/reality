@@ -67,7 +67,7 @@ describe('display formatting', () => {
 });
 
 describe('start screen', () => {
-  it('sends an example to a fresh lead chat with its dataset attached', async () => {
+  it('sends a question to a fresh lead chat, and a /mission starts the team on its goal', async () => {
     const calls: string[] = [];
     const leadId = '22222222-2222-4222-8222-222222222222';
     const chatId = '33333333-3333-4333-8333-333333333333';
@@ -100,17 +100,41 @@ describe('start screen', () => {
               record: { met: 0, failed: 0 },
             },
           ]);
+        if (url === '/api/missions' && init?.method === 'POST') {
+          missionBody = JSON.parse(String(init.body)) as { goal: string; botIds: string[] };
+          return Response.json({ id: 'm1', chatId: missionChat });
+        }
         if (init?.method === 'POST') return Response.json({ id: chatId });
         return Response.json([]);
       }),
     );
+    let missionBody: { goal: string; botIds: string[] } | null = null;
+    const missionChat = '44444444-4444-4444-8444-444444444444';
     render(<App />);
-    fireEvent.click(await screen.findByText('Bike sharing'));
+    const box = await screen.findByPlaceholderText('Ask Reality anything…');
+    // The start page has the lead, not example boxes.
+    expect(screen.queryByText('Bike sharing')).toBeNull();
+    expect((await screen.findAllByRole('img', { name: /^Reality/ })).length).toBeGreaterThan(0);
+    expect(document.querySelector('.home-hero .bot-figure')).toBeTruthy();
+    fireEvent.change(box, { target: { value: 'How strong is the seasonal cycle?' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
     await waitFor(() => expect(window.location.hash).toBe(`#/chat/${chatId}`));
     const posts = calls.filter((c) => c.startsWith('POST'));
     // A fresh chat is created first; the message must not land in an older chat.
     expect(posts).toEqual(['POST /api/chats', `POST /api/chats/${chatId}/messages`]);
     expect(calls.some((c) => c.includes(`/api/bots/${leadId}/chat`))).toBe(false);
+
+    window.location.hash = '';
+    const again = await screen.findByPlaceholderText('Ask Reality anything…');
+    fireEvent.change(again, { target: { value: '/mi' } });
+    expect(await screen.findByText('Work on it overnight')).toBeTruthy();
+    fireEvent.change(again, { target: { value: '/mission Find the best lipase for biodiesel' } });
+    fireEvent.keyDown(again, { key: 'Enter' });
+    await waitFor(() => expect(window.location.hash).toBe(`#/chat/${missionChat}`));
+    expect(missionBody).toMatchObject({
+      goal: 'Find the best lipase for biodiesel',
+      botIds: [leadId],
+    });
   });
 
   it('lists a direct chat with an employee that is not the lead', async () => {

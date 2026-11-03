@@ -4773,3 +4773,102 @@ body.resizing iframe {
   min-width: 120px;
   overflow-wrap: anywhere;
 }
+
+/* The commands a message box knows (/mission, /routine), above it while one is being typed. */
+.composer {
+  position: relative;
+}
+.command-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+.command-item {
+  display: grid;
+  grid-template-columns: 18px 17em minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.command-item:hover,
+.command-item:focus-visible {
+  background: var(--hover);
+}
+.command-name {
+  font-family: var(--mono, ui-monospace, monospace);
+  white-space: nowrap;
+}
+.command-label .muted {
+  display: block;
+}
+
+/* The project's files as a tree: folders fold, lines show what belongs where. */
+.file-tree,
+.tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tree-children {
+  margin-left: 13px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.tree-file,
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 7px;
+  font-size: 13.5px;
+}
+.tree-row {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  text-align: left;
+}
+.tree-file:hover,
+.tree-row:hover {
+  background: var(--hover);
+}
+.tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tree-chevron {
+  transition: transform 0.12s ease;
+  flex: none;
+}
+.tree-chevron.open {
+  transform: rotate(90deg);
+}
+.tree-file {
+  padding-left: 27px;
+}
+.tree-size {
+  flex: none;
+}

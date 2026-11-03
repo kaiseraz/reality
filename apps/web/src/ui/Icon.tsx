@@ -39,6 +39,8 @@ const PATHS = {
     'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z',
   clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2',
   book: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h7',
+  chevron: 'M9 6l6 6-6 6',
+  'folder-open': 'M4 19V6a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v2M4 19l2.5-8h15L19 19z',
 } as const;
 
 export type IconName = keyof typeof PATHS;
