@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { BotView, ChatMessage, ChatState } from '@reality/schemas';
-import { api, type Sample } from '../api.ts';
+import { api } from '../api.ts';
 import { autoGrow } from '../Home.tsx';
 import { BotFigure, PRESENCE_TEXT } from '../bots/BotFigure.tsx';
 import { ROLE } from '../bots/BotAvatar.tsx';
@@ -47,9 +47,7 @@ export function ChatView({
     });
   }, []);
   const [bots, setBots] = useState<BotView[]>([]);
-  const [samples, setSamples] = useState<Sample[]>([]);
   const [draft, setDraft] = useState('');
-  const [sample, setSample] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The workbench (computers) stays closed until the person opens it: a new chat
@@ -68,10 +66,6 @@ export function ChatView({
 
   useEffect(() => {
     load();
-    api
-      .samples()
-      .then((s) => setSamples(Array.isArray(s) ? s : []))
-      .catch(() => setSamples([]));
   }, [load]);
 
   // The crew changes while the chat is open: the lead hires specialists, so their
@@ -176,8 +170,7 @@ export function ChatView({
       });
       return;
     }
-    await act(() => api.sendChat(state.id, text, sample || undefined));
-    setSample('');
+    await act(() => api.sendChat(state.id, text));
   };
 
   const title = state.kind === 'dm' ? (team[0]?.name ?? state.title) : state.title;
@@ -330,7 +323,7 @@ export function ChatView({
               placeholder={
                 state.kind === 'dm'
                   ? `Message ${team[0]?.name ?? 'your bot'}`
-                  : `Message the group, @${team.map((b) => b.name).join(', @')}`
+                  : 'Message the group, or call someone with @'
               }
               onChange={(e) => {
                 setDraft(e.target.value);
@@ -364,31 +357,22 @@ export function ChatView({
                   }}
                 />
               </label>
-              <select
-                aria-label="Attach example data"
-                value={sample}
-                onChange={(e) => setSample(e.target.value)}
-              >
-                <option value="">No data</option>
-                {samples.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    Data: {s.title}
-                  </option>
-                ))}
-              </select>
-              {state.kind === 'group' &&
-                team.map((b) => (
-                  <button
-                    key={b.id}
-                    type="button"
-                    className="mention"
-                    onClick={() =>
-                      setDraft((d) => `${d}${d && !d.endsWith(' ') ? ' ' : ''}@${b.name} `)
-                    }
-                  >
-                    @{b.name}
-                  </button>
-                ))}
+              {state.kind === 'group' && (
+                <div className="mention-row" aria-label="Call someone">
+                  {team.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      className="mention"
+                      onClick={() =>
+                        setDraft((d) => `${d}${d && !d.endsWith(' ') ? ' ' : ''}@${b.name} `)
+                      }
+                    >
+                      @{b.name}
+                    </button>
+                  ))}
+                </div>
+              )}
               <span className="grow" />
               <button
                 type="submit"

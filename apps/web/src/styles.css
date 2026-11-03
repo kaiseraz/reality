@@ -4872,3 +4872,19 @@ body.resizing iframe {
 .tree-size {
   flex: none;
 }
+
+/* The teammates to call, in one line that scrolls sideways when there are many. */
+.mention-row {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mention-row::-webkit-scrollbar {
+  display: none;
+}
+.mention-row .mention {
+  flex: none;
+}
