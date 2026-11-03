@@ -62,6 +62,10 @@ COPY kicad /opt/reality/kicad
 COPY freecad-user.cfg /etc/skel/.FreeCAD/user.cfg
 COPY freecad-user.cfg /etc/skel/.config/FreeCAD/user.cfg
 
+# The browser searches with DuckDuckGo, which every computer may reach: Google is not allowed,
+# so a search typed into the address bar used to end on an error page.
+COPY browser-search.json /etc/chromium/policies/managed/reality-search.json
+
 # The sandbox's own entrypoint (/opt/gem/run.sh) creates the `gem` desktop user at
 # container start; do not switch USER here or the image cannot start (the user does
 # not exist in /etc/passwd yet). Tools stay readable for it under /usr.

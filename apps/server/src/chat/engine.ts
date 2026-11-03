@@ -19,7 +19,7 @@ import { unbackedNumbers } from '../verification/criteria.ts';
 import { LabDesktop } from '../lab/desktop.ts';
 import type { ProjectFolders } from '../projects/folders.ts';
 import { totalmem } from 'node:os';
-import { maxComputers, projectFolder } from '../computer/computers.ts';
+import { maxComputers, projectFolder, siteOf } from '../computer/computers.ts';
 import { describeLearned, installsIn } from '../computer/learned.ts';
 import { getLabEngine } from '../lab/engines.ts';
 import { labIntent } from '../lab/plan.ts';
@@ -133,6 +133,8 @@ interface Runner {
 /** A bot whose desktop the person holds: its turn waits at the next checkpoint. */
 interface Hold {
   chatId: string;
+  /** Sites a card already asked about while the person held the desktop. */
+  asked: Set<string>;
   gate: Promise<void>;
   release: () => void;
 }
@@ -160,7 +162,33 @@ export class ChatEngine {
   private timer: ReturnType<typeof setInterval> | undefined;
   private ticking: Promise<void> | null = null;
 
-  constructor(private readonly deps: EngineDeps) {}
+  constructor(private readonly deps: EngineDeps) {
+    // A site the person opens while holding a bot's desktop: they decide there and then, on a card.
+    if (deps.computers) {
+      deps.computers.onBlocked = (botId, host) =>
+        void this.blockedWhileHeld(botId, host).catch(() => undefined);
+    }
+  }
+
+  /** Without this the person sees only the browser's error page and cannot do anything about it. */
+  private async blockedWhileHeld(botId: string, host: string): Promise<void> {
+    const hold = this.holds.get(botId);
+    const domain = siteOf(host);
+    // Checked and noted before any await: a page reaches for a dozen hosts at once.
+    if (!hold || !domain || hold.asked.has(domain)) return;
+    hold.asked.add(domain);
+    await this.deps.store.add(hold.chatId, {
+      role: 'card',
+      botId,
+      card: {
+        kind: 'access',
+        domain,
+        reason:
+          'You opened it on this computer while you had control. Allow it, then reload the page.',
+        status: 'open',
+      },
+    });
+  }
 
   get engine(): 'model' | 'rules' {
     return this.deps.model ? 'model' : 'rules';
@@ -326,6 +354,8 @@ export class ChatEngine {
         ...card,
         status: allow && !failed ? 'allowed' : 'denied',
       });
+      // Asked while the person has the desktop: it was their own browsing, the bot stays asleep.
+      if (m.botId && this.holds.has(m.botId)) return true;
       await this.deps.store.add(chat.id, {
         role: 'user',
         text: failed
@@ -450,7 +480,7 @@ export class ChatEngine {
     if (this.holds.has(botId)) return;
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
-    this.holds.set(botId, { chatId, gate, release });
+    this.holds.set(botId, { chatId, gate, release, asked: new Set() });
     this.setPresence(botId, 'waiting', 'gives you its computer — you have control');
     void this.deps.store
       .add(chatId, {

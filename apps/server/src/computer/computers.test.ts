@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computerPath, isBackgroundHost, normalizeDomain } from './computers.ts';
+import { computerPath, isBackgroundHost, normalizeDomain, siteOf } from './computers.ts';
 import { viewerFor } from '../chat/tools.ts';
 
 describe('paths and programs on a bot computer', () => {
@@ -22,6 +22,13 @@ describe('paths and programs on a bot computer', () => {
 });
 
 describe('bot computer access rules', () => {
+  it('asks once per site, not once per host a page reaches for', () => {
+    expect(siteOf('upload.wikimedia.org')).toBe('wikimedia.org');
+    expect(siteOf('https://en.wikipedia.org/wiki/Lipase')).toBe('wikipedia.org');
+    expect(siteOf('news.bbc.co.uk')).toBe('bbc.co.uk');
+    expect(siteOf('localhost')).toBeNull();
+  });
+
   it('accepts plain domains and strips schemes, paths, ports and www', () => {
     expect(normalizeDomain('pypi.org')).toBe('pypi.org');
     expect(normalizeDomain('https://www.Wikipedia.org/wiki/Jet')).toBe('wikipedia.org');

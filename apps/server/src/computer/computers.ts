@@ -178,6 +178,22 @@ export function normalizeDomain(input: string): string | null {
   return d;
 }
 
+/** Second-level names under which a site's own name sits one label further down. */
+const SHARED_SLD = /^(co|com|ac|gov|edu|org|net|or|ne|go).[a-z]{2}$/;
+
+/**
+ * The site a host belongs to: upload.wikimedia.org and meta.wikimedia.org are wikimedia.org,
+ * news.bbc.co.uk is bbc.co.uk. One page pulls from many hosts of one site; a person decides
+ * on the site once.
+ */
+export function siteOf(host: string): string | null {
+  const d = normalizeDomain(host);
+  if (!d) return null;
+  const labels = d.split('.');
+  const keep = SHARED_SLD.test(labels.slice(-2).join('.')) ? 3 : 2;
+  return labels.slice(-keep).join('.');
+}
+
 export class ComputerError extends Error {}
 
 export class BotComputers {
@@ -1198,6 +1214,8 @@ export class BotComputers {
     'index.crates.io',
     'proxy.golang.org',
     'repo1.maven.org',
+    // The browser's search engine (set in the computer image); its result links still need access.
+    'duckduckgo.com',
   ] as const;
 
   async allowed(botId: string): Promise<string[]> {
