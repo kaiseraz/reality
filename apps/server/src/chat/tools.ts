@@ -43,6 +43,14 @@ import type { Chat, ChatStore } from './store.ts';
 const OPENS_A_DIALOG =
   /(?:^|[\s;&|/])(?:kicad|pcbnew|eeschema|gerbview|freecad|FreeCAD)(?:\s+[^;&|\n]*)?\s--?(?:help|version|h|v)\b/;
 
+/** The start of a document for its card in the chat: whole lines, so a table is not cut mid-row. */
+export function pagePreview(content: string, max = 1500): string {
+  if (content.length <= max) return content;
+  const cut = content.slice(0, max);
+  const end = cut.lastIndexOf('\n');
+  return end > max / 2 ? cut.slice(0, end) : cut;
+}
+
 /** A program a bot names for computer_open: a command name, nothing the shell would read. */
 const PROGRAM = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,59}$/;
 
@@ -426,7 +434,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'write_page',
     description:
-      'Creates a page or replaces its content (Markdown). Every change is kept as a version, so nothing is lost. For adding to a long page prefer append_page.',
+      'Creates a document or replaces its content (Markdown: headings, lists, tables). It appears in the chat as a document card with a preview the person reads there and opens in full; every change is kept as a version. Use it for every report, summary, plan or table the person should read or keep. For adding to a long page prefer append_page.',
     input_schema: obj(
       {
         title: { type: 'string' },
@@ -1450,8 +1458,12 @@ ${page.text.slice(0, 20_000)}${
         title: page.title,
         version: page.version,
         change: page.change,
+        preview: pagePreview(page.content),
+        author: bot.name,
       });
-      return { text: `Saved "${page.title}" as version ${page.version}.` };
+      return {
+        text: `Saved "${page.title}" as version ${page.version}. It shows in the chat as a document card the person can read and open; do not paste it into your message.`,
+      };
     }
 
     case 'create_task': {

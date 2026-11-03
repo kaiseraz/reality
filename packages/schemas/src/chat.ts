@@ -166,7 +166,16 @@ export type ChatCard =
       title: string;
       items: { label: string; value?: string; done?: boolean; url?: string }[];
     }
-  | { kind: 'page'; pageId: string; title: string; version: number; change: string }
+  | {
+      kind: 'page';
+      pageId: string;
+      title: string;
+      version: number;
+      change: string;
+      /** The start of the document, shown in the chat; older cards have none. */
+      preview?: string;
+      author?: string;
+    }
   | { kind: 'code'; purpose: string; code: string; status: string; stdout: string; stderr: string }
   /** The lead proposes specialists for a job; the person hires the team once. */
   | {

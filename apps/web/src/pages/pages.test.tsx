@@ -39,4 +39,25 @@ describe('page versions', () => {
     expect(container.querySelectorAll('em')).toHaveLength(1);
     expect(container.querySelector('em')?.textContent).toBe('this');
   });
+
+  it('renders a table as a table, with a pipe in code kept in its cell', () => {
+    const { container } = render(
+      <Markdown
+        text={[
+          'Intro',
+          '',
+          '| # | Name | Note |',
+          '|---|:--|---|',
+          '| 1 | Ada | `a|b` |',
+          '| 2 | Ben |  |',
+          '',
+          'After',
+        ].join('\n')}
+      />,
+    );
+    expect(container.querySelectorAll('th')).toHaveLength(3);
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(container.querySelector('tbody td:nth-child(3) code')?.textContent).toBe('a|b');
+    expect(container.querySelectorAll('p')).toHaveLength(2);
+  });
 });

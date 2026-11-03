@@ -16,6 +16,7 @@ export function isActionableCard(card: ChatCard): boolean {
   switch (card.kind) {
     case 'file':
     case 'visual':
+    case 'page':
       return true;
     case 'plan':
     case 'install':
@@ -247,13 +248,28 @@ export function Card({
       );
 
     case 'page':
+      // A document a bot wrote, readable where it was asked for; the whole page opens from here.
       return (
-        <a className="chat-card page-link" href={`#/page/${card.pageId}`}>
-          <Icon name="file" size={15} /> <strong>{card.title}</strong>
-          <span className="muted">
-            version {card.version} · {card.change}
-          </span>
-        </a>
+        <div className="chat-card artifact">
+          <a className="artifact-head" href={`#/page/${card.pageId}`}>
+            <span className="artifact-icon">
+              <Icon name="file" size={16} />
+            </span>
+            <span className="artifact-name">
+              <strong>{card.title}</strong>
+              <span className="muted small">
+                Document · version {card.version}
+                {card.author ? ` · ${card.author}` : ''}
+              </span>
+            </span>
+            <span className="artifact-open">Open</span>
+          </a>
+          {card.preview && (
+            <a className="artifact-preview" href={`#/page/${card.pageId}`} tabIndex={-1}>
+              <Markdown text={card.preview} />
+            </a>
+          )}
+        </div>
       );
 
     case 'code':

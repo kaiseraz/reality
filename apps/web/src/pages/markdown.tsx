@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
 /**
- * A small Markdown renderer for pages: headings, lists, quotes, code, rules, bold, italic,
- * inline code and http(s) links. It builds React elements (never HTML strings), so text
+ * A small Markdown renderer for pages: headings, lists, quotes, code, rules, tables, bold,
+ * italic, inline code and http(s) links. It builds React elements (never HTML strings), so text
  * written by bots or copied from sources cannot inject markup.
  */
 
@@ -39,6 +39,25 @@ function inline(text: string, key: string): ReactNode[] {
     last = m.index + t.length;
   }
   if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+const TABLE_ROW = /^\s*\|.*\|\s*$/;
+const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+/** The cells of a table row; a pipe inside `code` stays in its cell. */
+function cells(row: string): string[] {
+  const inner = row.trim().replace(/^\|/, '').replace(/\|$/, '');
+  const out: string[] = [];
+  let cur = '';
+  let code = false;
+  for (const ch of inner) {
+    if (ch === '`') code = !code;
+    if (ch === '|' && !code) {
+      out.push(cur.trim());
+      cur = '';
+    } else cur += ch;
+  }
+  out.push(cur.trim());
   return out;
 }
 
@@ -115,11 +134,43 @@ export function Markdown({ text }: { text: string }) {
       blocks.push(<blockquote key={k}>{inline(body.join(' '), k)}</blockquote>);
       continue;
     }
+    // A table: a row of cells, a line of dashes under it, then the rows.
+    if (TABLE_ROW.test(line) && TABLE_RULE.test(lines[i + 1] ?? '')) {
+      const head = cells(line);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && TABLE_ROW.test(lines[i] ?? '')) rows.push(cells(lines[i++] ?? ''));
+      const k = key();
+      blocks.push(
+        <div className="md-table" key={k}>
+          <table>
+            <thead>
+              <tr>
+                {head.map((c, j) => (
+                  <th key={j}>{inline(c, `${k}-h${j}`)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, ri) => (
+                <tr key={ri}>
+                  {head.map((_, j) => (
+                    <td key={j}>{inline(r[j] ?? '', `${k}-${ri}-${j}`)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      continue;
+    }
     const para: string[] = [];
     while (
       i < lines.length &&
       (lines[i] ?? '').trim() &&
-      !/^(#{1,4}\s|```|>|\s*([-*]|\d+\.)\s+)/.test(lines[i] ?? '')
+      !/^(#{1,4}\s|```|>|\s*([-*]|\d+\.)\s+)/.test(lines[i] ?? '') &&
+      !(TABLE_ROW.test(lines[i] ?? '') && TABLE_RULE.test(lines[i + 1] ?? ''))
     ) {
       para.push(lines[i++] ?? '');
     }

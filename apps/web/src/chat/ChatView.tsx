@@ -169,8 +169,16 @@ export function ChatView({
 
   const title = state.kind === 'dm' ? (team[0]?.name ?? state.title) : state.title;
   // Work steps and records are not in the thread, so they must not split up someone's messages.
+  // A document written again shows once, at its newest version, where it was last written.
+  const newestPage = new Map<string, number>();
+  for (const m of state.messages) {
+    if (m.card?.kind === 'page') newestPage.set(m.card.pageId, m.id);
+  }
   const seen = state.messages.filter(
-    (m) => m.role !== 'action' && (m.role !== 'card' || (m.card && isActionableCard(m.card))),
+    (m) =>
+      m.role !== 'action' &&
+      (m.role !== 'card' || (m.card && isActionableCard(m.card))) &&
+      (m.card?.kind !== 'page' || newestPage.get(m.card.pageId) === m.id),
   );
 
   return (
