@@ -257,6 +257,14 @@ export class BotComputers {
     return docker(this.config.dockerBin, args, timeoutMs);
   }
 
+  /** Whether Docker still runs this container, for a computer that is too busy to answer. */
+  private async containerRunning(container: string): Promise<boolean> {
+    const r = await this.run(['inspect', '-f', '{{.State.Running}}', container], 20_000).catch(
+      () => null,
+    );
+    return r?.code === 0 && r.stdout.trim() === 'true';
+  }
+
   /** Whether the computer image is present (it is large, so it is pulled on purpose). */
   async imageReady(): Promise<boolean> {
     const r = await this.run(['image', 'inspect', this.config.image], 20_000).catch(() => null);
@@ -513,9 +521,16 @@ export class BotComputers {
       // it does not, drop the entry so the next call re-adopts or restarts it.
       if (Date.now() - (l.checked ?? 0) > 5000) {
         l.checked = Date.now();
-        const alive = await this.api(l, 'GET', '/v1/sandbox', undefined, 3000)
-          .then(() => true)
-          .catch(() => false);
+        // A busy computer answers slowly; restarting it would throw away the work it is doing
+        // (seen: three at work restarted each other's computers seven times in one run).
+        const alive =
+          (await this.api(l, 'GET', '/v1/sandbox', undefined, 3000)
+            .then(() => true)
+            .catch(() => false)) ||
+          (await this.api(l, 'GET', '/v1/sandbox', undefined, 20_000)
+            .then(() => true)
+            .catch(() => false)) ||
+          (await this.containerRunning(l.container));
         if (!alive) {
           this.live.delete(botId);
           return this.ensure(botId);
