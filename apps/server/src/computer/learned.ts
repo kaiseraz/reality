@@ -6,7 +6,8 @@ import type pg from 'pg';
  * person (so the next bot that needs the same field starts from what worked).
  */
 
-export type Manager = 'apt' | 'pip' | 'conda';
+/** 'image': a program that came with the computer, learned for what it opens; never restored. */
+export type Manager = 'apt' | 'pip' | 'conda' | 'image';
 export interface Install {
   manager: Manager;
   package: string;
@@ -134,17 +135,28 @@ export class LearnedTools {
 
   /**
    * A program opened a file of this type on a desktop. It is noted on the package that brought
-   * the program; a program that came with the computer has none and is not noted.
+   * the program; a program that came with the computer gets its own entry, so the next bot learns
+   * that it is there and what it opens.
    */
   async opened(ownerId: string | null, program: string, ext: string): Promise<void> {
     if (!ext) return;
-    await this.pool.query(
+    const res = await this.pool.query(
       `UPDATE learned_tools
-          SET program = $3,
-              opens = CASE WHEN $4 = ANY(opens) THEN opens ELSE array_append(opens, $4) END,
+          SET program = $2,
+              opens = CASE WHEN $3 = ANY(opens) THEN opens ELSE array_append(opens, $3) END,
               uses = uses + 1, last_used = now()
-        WHERE owner_key = $1 AND (program = $3 OR package = $2)`,
-      [ownerKey(ownerId), program, program, ext],
+        WHERE owner_key = $1 AND manager <> 'image' AND (program = $2 OR package = $2)`,
+      [ownerKey(ownerId), program, ext],
+    );
+    if (res.rowCount) return;
+    await this.pool.query(
+      `INSERT INTO learned_tools (owner_key, manager, package, program, opens)
+       VALUES ($1, 'image', $2, $2, ARRAY[$3])
+       ON CONFLICT (owner_key, manager, package) DO UPDATE
+          SET opens = CASE WHEN $3 = ANY(learned_tools.opens) THEN learned_tools.opens
+                           ELSE array_append(learned_tools.opens, $3) END,
+              uses = learned_tools.uses + 1, last_used = now()`,
+      [ownerKey(ownerId), program, ext],
     );
   }
 
@@ -163,11 +175,13 @@ export function describeLearned(tools: LearnedTool[]): string {
   return tools
     .map((t) => {
       const how =
-        t.manager === 'apt'
-          ? `sudo apt-get install -y ${t.package}`
-          : t.manager === 'pip'
-            ? `pip install ${t.package}`
-            : `conda install -y ${t.package}`;
+        t.manager === 'image'
+          ? 'already on the computer'
+          : t.manager === 'apt'
+            ? `sudo apt-get install -y ${t.package}`
+            : t.manager === 'pip'
+              ? `pip install ${t.package}`
+              : `conda install -y ${t.package}`;
       const shows = t.program
         ? `; opens ${t.opens.length ? t.opens.map((e) => `.${e}`).join(', ') : 'files'} with ${t.program}`
         : '';

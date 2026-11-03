@@ -53,3 +53,19 @@ describe('what a bot installs, learned and brought back', () => {
     ).toBe('- pymol (sudo apt-get install -y pymol); opens .pdb, .pml with pymol; used 3x');
   });
 });
+
+describe('programs that come with the computer', () => {
+  it('are described as already there, with what they opened', () => {
+    expect(
+      describeLearned([
+        { manager: 'image', package: 'pcbnew', program: 'pcbnew', opens: ['kicad_pcb'], uses: 1 },
+      ]),
+    ).toBe('- pcbnew (already on the computer); opens .kicad_pcb with pcbnew; used 1x');
+  });
+
+  it('are never installed again', () => {
+    expect(parseInstallLines('image pcbnew\napt pymol')).toEqual([
+      { manager: 'apt', package: 'pymol' },
+    ]);
+  });
+});

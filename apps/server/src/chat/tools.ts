@@ -349,6 +349,18 @@ export const TOOLS: ToolSpec[] = [
     ),
   },
   {
+    name: 'check_work',
+    description:
+      'Proves what you made on your computer before you report it: Reality itself runs the command on your computer and puts what it showed into the chat for the person, so your word is not all there is. Make the command test the result from the raw file (count the atoms of a structure, parse the output, recompute a number, run the program on it), not only that a file exists. Exit 0 means it holds. Report only what passed, and say what the check showed.',
+    input_schema: obj(
+      {
+        claim: { type: 'string', description: 'What you say holds, in one sentence' },
+        command: { type: 'string', description: 'The shell command that tests it' },
+      },
+      ['claim', 'command'],
+    ),
+  },
+  {
     name: 'open_lab_result',
     description:
       'Sends the result of a lab simulation to your own computer and opens it in the real program so the user watches it live: a board from pcb_design opens in KiCad (first as it stood after placement, with the ratsnest of what is still to connect, then routed), an assembly from turbofan, design_assembly or rocket_cad opens in FreeCAD. The files land in ~/workspace/lab-<first 8 characters of the task id>/. Give the task id from the lab result. A finished simulation already shows up on a running computer by itself; use this to start the computer and show it, or to show it again. Showing it again replaces the files in that folder, so a hand edit is lost: use recheck_board first.',
@@ -533,6 +545,7 @@ export const TOOL_PRESENCE: Record<string, ['working' | 'searching' | 'reading',
   computer_input: ['working', 'operates its desktop'],
   recheck_board: ['working', 'checks the edited board'],
   ask_access: ['working', 'opens web access'],
+  check_work: ['working', 'checks its work'],
 };
 
 export interface ToolDeps extends AttachDeps {
@@ -1206,6 +1219,25 @@ export async function runTool(
       }
       return {
         text: `"${title}" is open beside the chat (version ${earlier + 1}). The person sees it now.`,
+      };
+    }
+
+    case 'check_work': {
+      const pc = deps.computers;
+      if (!pc) return { text: 'Your computer is not available here.', isError: true };
+      const claim = str(input.claim, 300).trim();
+      const command = str(input.command, 2000).trim();
+      if (!claim || !command) return { text: 'Give the claim and the command.', isError: true };
+      const out = await pc.exec(bot.id, command, 300, `Check: ${claim}`);
+      const tail = out.output.trim().split('\n').slice(-4).join(' | ').slice(0, 400);
+      // Said by Reality, not by the bot: the person reads what the command showed.
+      await deps.store.add(chat.id, {
+        role: 'system',
+        text: `${out.exitCode === 0 ? 'Checked' : 'Check failed'} on ${bot.name}'s computer: ${claim} (\`${command}\` exited ${out.exitCode}${tail ? `: ${tail}` : ''})`,
+      });
+      return {
+        text: `Exit code ${out.exitCode}.\n${out.output.slice(-4000) || '(no output)'}`,
+        isError: out.exitCode !== 0,
       };
     }
 

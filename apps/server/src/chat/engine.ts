@@ -20,7 +20,7 @@ import { LabDesktop } from '../lab/desktop.ts';
 import type { ProjectFolders } from '../projects/folders.ts';
 import { totalmem } from 'node:os';
 import { maxComputers, projectFolder } from '../computer/computers.ts';
-import { describeLearned } from '../computer/learned.ts';
+import { describeLearned, installsIn } from '../computer/learned.ts';
 import { getLabEngine } from '../lab/engines.ts';
 import { labIntent } from '../lab/plan.ts';
 import { normalizeDomain } from '../computer/computers.ts';
@@ -81,6 +81,10 @@ const STARTS_A_TASK = new Set([
   'get_library',
   'get_mcp_server',
 ]);
+/** Tools that make something on a bot's computer that the person will rely on. */
+const MAKES = new Set(['computer_write', 'computer_open', 'share_file']);
+const PROVE_IT =
+  'You made something on your computer and are about to report it, but code has not checked it. First call check_work with a command that tests the result from the raw file (count, parse, recompute, run it), not only that a file exists. Then report what passed and what the check showed.';
 const CLOSE_TURN =
   'Stop here and write to the person now, without tools: what you found, or what you did and how far it got, and what is missing if it is not finished. Plain words, no plans for later unless you say it is unfinished.';
 /** When even that brings no words. A person must never be left with silence. */
@@ -703,6 +707,21 @@ export class ChatEngine {
           })
           .then(async (shown) => {
             this.deps.folders?.touch(chat);
+            // The programs of the computer image count as learned too, with what they opened.
+            const names = shown?.opened ?? [];
+            const seen: [string, string][] = [
+              ...(names.some((n) => n.endsWith('.kicad_pcb'))
+                ? ([['pcbnew', 'kicad_pcb']] as [string, string][])
+                : []),
+              ...(names.some((n) => n === 'build_live.py' || /\.(step|stp)$/i.test(n))
+                ? ([['freecad', 'step']] as [string, string][])
+                : []),
+            ];
+            for (const [program, ext] of seen) {
+              await Promise.resolve()
+                .then(() => this.deps.computers?.learned.opened(chat.ownerId, program, ext))
+                .catch(() => undefined);
+            }
             // The check above does not see copper planes; what does see them is said here.
             if (shown?.kicadCheck) {
               await this.deps.store.add(chat.id, { role: 'system', text: shown.kicadCheck });
@@ -1291,6 +1310,11 @@ export class ChatEngine {
       let heldToWord = 0;
       let cuts = 0;
       let startedWork = false;
+      // Made something on its computer, and whether code has checked it since. Lab work is
+      // checked by its engine and a contract by its own check; this is for everything else.
+      let made = false;
+      let proved = false;
+      let askedForProof = false;
       for (let step = 0; step < MAX_STEPS + desktopSteps; step++) {
         // The person may hold this desktop (take-over): the turn waits here.
         await this.checkpoint(chat.id, bot);
@@ -1332,6 +1356,12 @@ export class ChatEngine {
                 convo.push({ role: 'user', content: HOLD_TO_WORD });
                 continue;
               }
+            }
+            const unproved = made && !proved && !startedWork && !contract;
+            if (unproved && !askedForProof && !text.startsWith(PASS) && this.deps.computers) {
+              askedForProof = true;
+              convo.push({ role: 'user', content: PROVE_IT });
+              continue;
             }
             closing = text.startsWith(PASS) ? '' : text;
             passedOn = text.startsWith(PASS);
@@ -1391,6 +1421,15 @@ export class ChatEngine {
               handoff: [] as string[],
             }));
           evidence.push(out.text);
+          if (!out.isError) {
+            const installs =
+              b.name === 'computer_run' && installsIn(String(b.input.command ?? '')).length > 0;
+            if (MAKES.has(b.name) || installs) {
+              made = true;
+              proved = false;
+            }
+            if (b.name === 'check_work') proved = true;
+          }
           if (b.name.startsWith('computer_') || b.name === 'mcp_call')
             this.deps.folders?.touch(chat);
           if (out.waiting) waiting = true;
@@ -1467,6 +1506,13 @@ export class ChatEngine {
         );
         if (unbacked.length > 0) {
           await this.deps.store.setCard(msg.id, { kind: 'unbacked', numbers: unbacked });
+        }
+        // Asked once and still not checked: the person is told, by Reality, not by the bot.
+        if (made && !proved && !startedWork && !contract && this.deps.computers) {
+          await this.deps.store.add(chat.id, {
+            role: 'system',
+            text: `Not checked by code: what ${bot.name} made on its computer for this answer was not tested by a check.`,
+          });
         }
         for (const b of addressed) {
           this.queue(chat.id, b.id, true);
@@ -1744,7 +1790,7 @@ This is a team room, not a queue of assistants: the others read every message, a
   - Operating programs yourself: you can look at your screen (computer_screen) and use mouse and keyboard (computer_input), so work in KiCad, FreeCAD and other programs the way a person does, one action at a time, looking at the new picture after each. Use it for what a script cannot show or do: walking through a design in the program, running KiCad's Design Rules Checker from the Inspect menu, rotating a 3D view. Press labelled things with click_text. Report only what the screen shows after the action: an empty result list means nothing was found only if the run has happened, so check that it has. For building things use the lab engines, not the mouse or your own scripts: they are checked. The lab makes a board larger by itself when the parts do not fit, and says so; give the size you want and no more than that. Never route a board by hand instead. One board that passed its check is the result: do not run it again unless the person or a teammate asks for a change. When a board was changed by hand in KiCad (by you, or by the user who took over your desktop), save it with ctrl+s and call recheck_board; a hand-changed board counts only after that check.
   - Analysis / code: keep .py, .csv, .md in the project folder; the live activity feed under your screen shows every command.
   - Tools are usually already on your computer (kicad, freecad, cadquery). Install only what is missing: pip for Python packages, apt-get for desktop programs, git clone for libraries.
-  - Any other field works the same way; Reality has no fixed list of fields. When a job needs a program you do not have (a protein or molecule viewer, a statistics package, a map tool, a circuit or fluid simulator, an image or audio editor), pick what a professional in that field uses, install it on your computer (apt-get, pip, conda, R, git), fetch the data from its public source (ask_access for its domain), and open the work live with computer_open so the person watches it; name the program there when the file type does not imply it. Prefer real data and established tools over drawing something yourself. Check a result a second, independent way before you report it (another tool, a recount from the raw file), and say how you checked it: that is your check, not a verified result card.
+  - Any other field works the same way; Reality has no fixed list of fields. When a job needs a program you do not have (a protein or molecule viewer, a statistics package, a map tool, a circuit or fluid simulator, an image or audio editor), pick what a professional in that field uses, install it on your computer (apt-get, pip, conda, R, git), fetch the data from its public source (ask_access for its domain), and open the work live with computer_open so the person watches it; name the program there when the file type does not imply it. Prefer real data and established tools over drawing something yourself. Before you report it, prove it with check_work: Reality runs your test command (a recount from the raw file, a parse, the program run on it) and shows the person what it printed. An answer about something you made that no check passed is marked as not checked by code.
   - What you produce on your computer is your own work; verified simulation results come from run_simulation as cards.
 - Longer texts (reports, summaries) go to pages (write_page, append_page); in the chat say one sentence about it.
 
