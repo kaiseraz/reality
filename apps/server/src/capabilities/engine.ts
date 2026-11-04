@@ -706,11 +706,38 @@ export interface ToolAccess {
  * install into an isolated layer → requirement test → enable → trust through use.
  * Discovering a package never means trusting it; every step leaves a record.
  */
+/** How long a card for a capability counts as open; after that it may be inspected again. */
+const ASKED_FOR_MS = 30 * 60_000;
+
 export class CapabilityEngine implements CapabilityAgent, CapabilityResolver {
   private readonly staging: string;
+  /** Work on one capability at a time: two at once share its staging folder and its record. */
+  private readonly busy = new Map<string, Promise<unknown>>();
+  /**
+   * Capabilities whose card a person has in front of them now, and since when. Kept here, not in
+   * the record: an "inspected" record left by a stopped run has no card any more and is inspected
+   * again; one asked for minutes ago is not inspected under the open card.
+   */
+  private readonly asked = new Map<string, number>();
 
   constructor(private readonly deps: EngineDeps) {
     this.staging = join(deps.dir, 'staging');
+  }
+
+  /**
+   * Runs one job on a capability after the one before it finished. Seen: a bot retried a lab job
+   * while its tool was still being inspected, and the second download deleted the first one's
+   * files, twelve times in a row.
+   */
+  private async oneAtATime<T>(id: string, job: () => Promise<T>): Promise<T> {
+    const before = this.busy.get(id) ?? Promise.resolve();
+    const run = before.catch(() => undefined).then(job);
+    this.busy.set(id, run);
+    try {
+      return await run;
+    } finally {
+      if (this.busy.get(id) === run) this.busy.delete(id);
+    }
   }
 
   private layerMount(c: CapabilityRecord): Mount | undefined {
@@ -1039,6 +1066,11 @@ export class CapabilityEngine implements CapabilityAgent, CapabilityResolver {
     };
     for (const chosen of turns) {
       const outcome = await this.inspectCandidate(label, need, chosen, judged, taskId, origin);
+      // Another task installed it while this one waited its turn.
+      if (outcome.kind === 'reuse') {
+        if (held) await dropStaged(held.proposal);
+        return outcome;
+      }
       if (outcome.kind === 'proposal') {
         const warned = (outcome.proposal as unknown as { warnings?: string[] }).warnings?.length;
         if (!warned) {
@@ -1074,6 +1106,55 @@ export class CapabilityEngine implements CapabilityAgent, CapabilityResolver {
     if (!chosen.facts) {
       return { kind: 'unavailable' as const, detail: `${chosen.package}: no facts.` };
     }
+    const id = chosen.provides;
+    const facts = chosen.facts;
+    return this.oneAtATime(id, async () => {
+      const now = await this.deps.store.get(id);
+      if (now && (await this.usable(now))) {
+        return {
+          kind: 'reuse' as const,
+          capabilityId: id,
+          detail: `Reused ${now.package} ${now.version}; it was installed meanwhile.`,
+        };
+      }
+      const askedAt = this.asked.get(id);
+      if (
+        now?.state === 'inspected' &&
+        now.version === facts.version &&
+        askedAt !== undefined &&
+        Date.now() - askedAt < ASKED_FOR_MS
+      ) {
+        return {
+          kind: 'unavailable' as const,
+          detail: `${chosen.package} ${facts.version} is already inspected and waits for the person's approval on its card. Do not start it again: wait until it is approved, then run the job once more.`,
+        };
+      }
+      const made = await this.inspectChosen(
+        label,
+        need,
+        { ...chosen, facts },
+        ranked,
+        taskId,
+        origin,
+      );
+      if (made.kind === 'proposal') this.asked.set(id, Date.now());
+      return made;
+    });
+  }
+
+  private async inspectChosen(
+    label: string,
+    need: string,
+    chosen: CandidateAssessment & { facts: NonNullable<CandidateAssessment['facts']> },
+    ranked: CandidateAssessment[],
+    taskId: string,
+    origin: {
+      source: 'catalog' | 'search';
+      considered?: number;
+      bySource?: Record<string, number>;
+      notes?: string[];
+    },
+  ) {
     const id = chosen.provides;
     const version = chosen.facts.version;
     await this.deps.store.discover({
@@ -1364,8 +1445,21 @@ export class CapabilityEngine implements CapabilityAgent, CapabilityResolver {
   }
 
   async install(proposal: CapabilityProposal, taskId: string) {
+    return this.oneAtATime(proposal.capabilityId, () => this.installNow(proposal, taskId));
+  }
+
+  private async installNow(proposal: CapabilityProposal, taskId: string) {
     const id = proposal.capabilityId;
+    this.asked.delete(id);
     const record = await this.deps.store.get(id);
+    // Approved twice (two tasks asked for the same tool): the first install serves both.
+    if (record && (await this.usable(record))) {
+      return {
+        ok: true as const,
+        capabilityId: id,
+        detail: `${record.package} ${record.version} is installed and tested already; it is used as it is.`,
+      };
+    }
     if (!record || record.state !== 'inspected') {
       return {
         ok: false as const,
