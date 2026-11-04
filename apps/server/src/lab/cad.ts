@@ -129,7 +129,7 @@ for name, group, shape in PARTS:
 write_csv("result.csv", ["name", "group", "solids", "valid", "volume_mm3", "size_x", "size_y", "size_z"], rows)
 
 # One binary STL per group for the viewer: tessellate, honour face orientation.
-deflection = float(P.get("mesh_mm", 1.5))
+deflection = float(P["mesh_mm"]) if P.get("mesh_mm") else (float(P["fan_diameter_mm"]) / 800 if P.get("fan_diameter_mm") else 1.5)
 def write_stl(fname, shapes):
     tris = []
     for shape in shapes:

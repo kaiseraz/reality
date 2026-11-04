@@ -544,7 +544,9 @@ const CAD_LIMITS = {
         hpt_stages: z.number().int().min(1).max(3).default(2),
         lpt_stages: z.number().int().min(1).max(7).default(4),
         injectors: z.number().int().min(6).max(40).default(20),
-        mesh_mm: z.number().min(0.3).max(10).default(2),
+        // Finer for a smaller engine: the default (fan diameter / 800, 2 mm at 1600 mm) keeps thin
+        // blades within the volume check, which a fixed 2 mm missed on a 280 mm engine.
+        mesh_mm: z.number().min(0.1).max(10).optional(),
       })
       .strict(),
     requires: ['ocp'],
