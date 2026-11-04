@@ -1684,8 +1684,13 @@ export class ChatEngine {
       ?.text.replace(/@\S+\s*/g, '')
       .trim();
     if (!question || last?.role !== 'user') return { passed: true };
-    this.setPresence(bot.id, 'working', 'starts an analysis');
     const sample = chatSample;
+    // Small talk is no research job: one short line, nothing started.
+    if (!sample && !labIntent(question) && question.split(/\s+/).length < 4) {
+      await say('Hi. Tell me what to build or check, for example "a launch vehicle for 15 t to orbit".');
+      return { passed: false };
+    }
+    this.setPresence(bot.id, 'working', 'starts an analysis');
     await this.deps.store.add(chat.id, {
       role: 'action',
       botId: bot.id,
