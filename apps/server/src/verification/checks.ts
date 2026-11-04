@@ -4,6 +4,7 @@ import { CAD_CHECK } from '../lab/cad-check.ts';
 import { DESIGN_CHECK } from '../lab/design.ts';
 import { PCB_CHECK_DEF } from '../lab/pcb.ts';
 import { ROCKET_CHECKS } from '../lab/rocket-checks.ts';
+import { PHYSICS_CHECKS } from '../lab/physics.ts';
 
 /**
  * Verification checks: independent re-computations that confirm a result from the raw
@@ -356,6 +357,7 @@ verdict(passed, len(claims), 0.0, mismatches,
   ...LAB_CHECKS,
   CAD_CHECK,
   ...ROCKET_CHECKS,
+  ...PHYSICS_CHECKS,
   DESIGN_CHECK,
   PCB_CHECK_DEF,
 ];

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CAD_EPILOGUE, CAD_HELPERS, TURBOFAN } from './cad.ts';
 import { DESIGN_ENGINE } from './design.ts';
+import { PHYSICS_ENGINES } from './physics.ts';
 import { PCB_ENGINE, PCB_RECHECK_ENGINE } from './pcb.ts';
 import { ROCKET_ENGINES } from './rocket.ts';
 
@@ -12,7 +13,16 @@ import { ROCKET_ENGINES } from './rocket.ts';
  */
 
 export type LabDomain =
-  'photonics' | 'quantum' | 'chemistry' | 'materials' | 'cad' | 'aerospace' | 'electronics';
+  | 'photonics'
+  | 'quantum'
+  | 'chemistry'
+  | 'materials'
+  | 'cad'
+  | 'aerospace'
+  | 'electronics'
+  | 'mechanics'
+  | 'thermal'
+  | 'fluids';
 
 export interface LabEngine {
   name: string;
@@ -582,7 +592,13 @@ const CAD_LIMITS = {
   },
 );
 
-(LAB_ENGINES as LabEngine[]).push(...ROCKET_ENGINES, DESIGN_ENGINE, PCB_ENGINE, PCB_RECHECK_ENGINE);
+(LAB_ENGINES as LabEngine[]).push(
+  ...ROCKET_ENGINES,
+  DESIGN_ENGINE,
+  PCB_ENGINE,
+  PCB_RECHECK_ENGINE,
+  ...PHYSICS_ENGINES,
+);
 
 export const getLabEngine = (name: string): LabEngine | undefined =>
   LAB_ENGINES.find((e) => e.name === name);

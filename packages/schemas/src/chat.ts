@@ -283,7 +283,16 @@ export type ChatCard =
       taskId: string;
       engine: string;
       domain:
-        'photonics' | 'quantum' | 'chemistry' | 'materials' | 'cad' | 'aerospace' | 'electronics';
+        | 'photonics'
+        | 'quantum'
+        | 'chemistry'
+        | 'materials'
+        | 'cad'
+        | 'aerospace'
+        | 'electronics'
+        | 'mechanics'
+        | 'thermal'
+        | 'fluids';
       /** Downloadable results (STEP assembly, meshes). */
       files?: { id: string; name: string; sizeBytes: number }[];
       title: string;

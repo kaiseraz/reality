@@ -133,6 +133,42 @@ const num = (re: RegExp, s: string) => {
  * Recognises a lab question without a model (keywords, numbers with units, element and
  * molecule names). Returns nothing for anything it is not sure about.
  */
+/** Structures, heat, fluids and fields, in the words engineers ask in (English and German). */
+function physicsIntent(s: string): { engine: string; params: Record<string, unknown> } | undefined {
+  if (/cavity|lid[- ]driven|kavit[aä]t|deckelgetrieben/.test(s)) {
+    const re = num(/re(?:ynolds)?\s*(?:=|number|zahl)?\s*(\d+)/, s);
+    const reynolds = Math.max(10, Math.min(1000, re ?? 100));
+    return {
+      engine: 'cavity_flow',
+      params: {
+        reynolds,
+        ...(reynolds > 400 ? { grid: 129 } : reynolds > 100 ? { grid: 97 } : {}),
+      },
+    };
+  }
+  if (/\bfins?\b|k[uü]hlrippe|heat ?sink|k[uü]hlk[oö]rper/.test(s)) {
+    return { engine: 'heat_fin', params: {} };
+  }
+  if (/microstrip|mikrostreifen|characteristic impedance|wellenwiderstand/.test(s)) {
+    return { engine: 'microstrip', params: {} };
+  }
+  if (
+    /plate with a hole|hole in a plate|lochplatte|stress concentration|kerbwirkung|kerbfaktor/.test(
+      s,
+    )
+  ) {
+    return { engine: 'structural_fea', params: { case: 'plate_hole' } };
+  }
+  if (
+    /cantilever|kragbalken|kragarm|beam (deflection|stress)|biegebalken|\bfea\b|finite element/.test(
+      s,
+    )
+  ) {
+    return { engine: 'structural_fea', params: { case: 'cantilever' } };
+  }
+  return undefined;
+}
+
 export function labIntent(
   request: string,
 ): { engine: string; params: Record<string, unknown> } | undefined {
@@ -156,6 +192,8 @@ export function labIntent(
       },
     };
   }
+  const physics = physicsIntent(s);
+  if (physics) return physics;
   const center = num(/(\d{3,5}(?:[.,]\d+)?)\s*nm/, s);
   if (
     /\b(bell|ghz)\b|qubit|quantum (circuit|state|gate)|quantenschaltung|superposition|verschr[aä]nk|entangle/.test(

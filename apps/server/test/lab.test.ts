@@ -47,6 +47,15 @@ describe('lab planning (pure)', () => {
     expect(labIntent('Monte Carlo tolerance of a Bragg mirror, 5 nm sigma')?.engine).toBe(
       'stack_tolerance',
     );
+    expect(labIntent('Lid-driven cavity at Re 400')).toEqual({
+      engine: 'cavity_flow',
+      params: { reynolds: 400, grid: 97 },
+    });
+    expect(labIntent('Wellenwiderstand einer Mikrostreifenleitung')?.engine).toBe('microstrip');
+    expect(labIntent('Kerbfaktor einer Lochplatte')).toEqual({
+      engine: 'structural_fea',
+      params: { case: 'plate_hole' },
+    });
     expect(labIntent('Which regions drive revenue?')).toBeUndefined();
   });
 
@@ -147,6 +156,10 @@ describe('lab tasks (database, sandbox)', () => {
     ['Monte Carlo tolerance of a Bragg mirror with 6 pairs', 'stack_tolerance', 'yield'],
     ['GHZ state on 4 qubits', 'quantum_circuit', 'top_probability'],
     ['Lattice constant of copper', 'fcc_crystal', 'a0_angstrom'],
+    ['Stress and deflection of a cantilever beam', 'structural_fea', 'tip_deflection_mm'],
+    ['Stress concentration of a plate with a hole', 'structural_fea', 'kt_net'],
+    ['Heat shed by a cooling fin', 'heat_fin', 'heat_w_per_m'],
+    ['Lid-driven cavity flow at Re 100', 'cavity_flow', 'psi_min'],
   ])(
     'runs "%s" with %s and verifies it independently',
     async (request, engine, field) => {
