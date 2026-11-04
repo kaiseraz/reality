@@ -9,9 +9,10 @@ import { VisualPanel, type Visual, type VisualFocus } from './VisualPanel.tsx';
 
 type Tab = 'mission' | 'computers' | 'visuals' | 'files' | 'results';
 
-const WIDTH_KEY = 'reality.workbench.width';
+// v2: the work takes most of the window now, like a viewer beside a narrow chat.
+const WIDTH_KEY = 'reality.workbench.width.v2';
 const clampWidth = (w: number) =>
-  Math.round(Math.max(320, Math.min(w, Math.max(360, window.innerWidth - 560))));
+  Math.round(Math.max(320, Math.min(w, Math.max(360, window.innerWidth - 680))));
 
 /** The workbench's width, set by dragging its left edge and remembered. */
 function useWidth(): [number, (e: React.PointerEvent) => void] {
@@ -22,7 +23,7 @@ function useWidth(): [number, (e: React.PointerEvent) => void] {
     } catch {
       saved = 0;
     }
-    return clampWidth(saved || window.innerWidth * 0.42);
+    return clampWidth(saved || window.innerWidth * 0.58);
   });
   const start = (e: React.PointerEvent) => {
     e.preventDefault();

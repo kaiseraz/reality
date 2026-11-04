@@ -169,7 +169,15 @@ export function ComputerPanel({
         </div>
       )}
 
-      {lean && <LiveFeed view={view} working={working} name={bot.name} />}
+      {lean && (
+        <details className="computer-details pc-feed-fold">
+          <summary>
+            <span className={`dot ${working ? 'tone-info live' : 'tone-neutral'}`} />
+            {working ? `${bot.name}: ${working}` : 'On this computer'}
+          </summary>
+          <LiveFeed view={view} working={working} name={bot.name} />
+        </details>
+      )}
 
       {lean ? (
         <details className="computer-details">

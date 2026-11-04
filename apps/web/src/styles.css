@@ -4349,9 +4349,10 @@ body.resizing iframe {
     opacity: 0.35;
   }
 }
+/* All screens: big enough to see what each bot does; two across up to four, then more. */
 .pcs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
   gap: 12px;
 }
 .pc-tile {
@@ -4887,4 +4888,39 @@ body.resizing iframe {
 }
 .mention-row .mention {
   flex: none;
+}
+
+/*
+ * The work fills the right side, like a viewer beside a narrow chat: the live desktop grows to
+ * the full height instead of a fixed 5:4 box, and what runs on it folds away underneath.
+ */
+.chat-side.workbench {
+  padding: 12px;
+}
+.chat-side.workbench > .pcs-wrap,
+.chat-side.workbench .computer,
+.chat-side.workbench .vnc-space {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.chat-side.workbench .vnc-frame {
+  aspect-ratio: auto;
+  flex: 1;
+  min-height: 280px;
+}
+.chat-side.workbench .computer-off {
+  flex: 1;
+}
+.chat-side.workbench .pcs-wrap:has(> .pcs-grid) {
+  overflow-y: auto;
+}
+.pc-feed-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pc-feed-fold .pc-feed-head {
+  display: none;
 }

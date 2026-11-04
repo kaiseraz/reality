@@ -1343,10 +1343,12 @@ export async function runTool(
       if (!claim || !command) return { text: 'Give the claim and the command.', isError: true };
       const out = await pc.exec(bot.id, command, 300, `Check: ${claim}`);
       const tail = out.output.trim().split('\n').slice(-4).join(' | ').slice(0, 400);
-      // Said by Reality, not by the bot: the person reads what the command showed.
+      // Said by Reality, not by the bot: the person reads what the command showed. A long command
+      // is cut here; the whole one is in the computer's activity list.
+      const shown = command.length > 90 ? `${command.slice(0, 90)}…` : command;
       await deps.store.add(chat.id, {
         role: 'system',
-        text: `${out.exitCode === 0 ? 'Checked' : 'Check failed'} on ${bot.name}'s computer: ${claim} (\`${command}\` exited ${out.exitCode}${tail ? `: ${tail}` : ''})`,
+        text: `${out.exitCode === 0 ? 'Checked' : 'Check failed'} on ${bot.name}'s computer: ${claim} (\`${shown}\` exited ${out.exitCode}${tail ? `: ${tail.slice(-160)}` : ''})`,
       });
       return {
         text: `Exit code ${out.exitCode}.\n${out.output.slice(-4000) || '(no output)'}`,
