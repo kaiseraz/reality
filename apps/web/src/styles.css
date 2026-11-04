@@ -4924,3 +4924,60 @@ body.resizing iframe {
 .pc-feed-fold .pc-feed-head {
   display: none;
 }
+
+/* Fields from the physics lab: the picture to scale, then its colour scale. */
+.field {
+  margin: 0 0 10px;
+}
+.field svg,
+.field-canvas {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+  background: #0b0d16;
+}
+.field-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.field-ramp {
+  flex: 1;
+  max-width: 260px;
+  height: 8px;
+  border-radius: 4px;
+}
+
+/* A page saved as PDF: only the document, on white, like a report. */
+@media print {
+  .sidebar,
+  .doc-versions,
+  .doc-page .page-head button {
+    display: none !important;
+  }
+  html,
+  body,
+  .main,
+  .doc-main {
+    background: #fff !important;
+    color: #111 !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+  .doc-layout {
+    display: block !important;
+  }
+  .markdown,
+  .markdown * {
+    color: #111 !important;
+  }
+  .md-table th {
+    background: #f1f1f1 !important;
+  }
+  .md-table th,
+  .md-table td {
+    border-color: #bbb !important;
+  }
+}

@@ -99,6 +99,21 @@ export function DocPage({
         </div>
         {!editing && (
           <button
+            className="btn-ghost"
+            title="Save as PDF: the browser's print dialog, with only the document"
+            onClick={() => {
+              // The file is named after the page; the print styles leave only the document.
+              const before = document.title;
+              document.title = page.title;
+              window.print();
+              document.title = before;
+            }}
+          >
+            <Icon name="file" /> PDF
+          </button>
+        )}
+        {!editing && (
+          <button
             onClick={() => {
               setDraft(page.content);
               setEditing(true);

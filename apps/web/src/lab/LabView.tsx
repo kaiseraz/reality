@@ -5,11 +5,28 @@ import { Icon } from '../ui/Icon.tsx';
 import { Atoms3D, type Atom } from './Atoms3D.tsx';
 import { BarChart, histogram, LineChart } from './Charts.tsx';
 import { PcbView } from './PcbView.tsx';
+import { GridField, TriField } from './FieldViews.tsx';
 
 // The 3D viewer pulls in three.js; load it only when a CAD card actually appears.
 const CadView = lazy(() => import('./CadView.tsx').then((m) => ({ default: m.CadView })));
 
 type LabCard = Extract<ChatCard, { kind: 'lab' }>;
+
+/** Ghia, Ghia & Shin (1982), Table I: u on the cavity's vertical centre line, shown beside a run. */
+const GHIA_U: Record<number, number[]> = {
+  100: [
+    0, -0.03717, -0.04192, -0.04775, -0.06434, -0.1015, -0.15662, -0.2109, -0.20581, -0.13641,
+    0.00332, 0.23151, 0.68717, 0.73722, 0.78871, 0.84123, 1,
+  ],
+  400: [
+    0, -0.08186, -0.09266, -0.10338, -0.14612, -0.24299, -0.32726, -0.17119, -0.11477, 0.02135,
+    0.16256, 0.29093, 0.55892, 0.61756, 0.68439, 0.75837, 1,
+  ],
+  1000: [
+    0, -0.18109, -0.20196, -0.2222, -0.2973, -0.38289, -0.27805, -0.10648, -0.0608, 0.05702,
+    0.18719, 0.33304, 0.46604, 0.51117, 0.57492, 0.65928, 1,
+  ],
+};
 type Row = Record<string, unknown>;
 
 const n = (v: unknown) => (typeof v === 'number' ? v : Number(v));
@@ -712,6 +729,130 @@ export function LabView({ card: given, large = false }: { card: LabCard; large?:
                 ['Deviation', s.deviation_percent, '%'],
                 ['Cohesive energy', s.cohesive_energy_eV, 'eV'],
                 ['Bulk modulus', s.bulk_modulus_GPa, 'GPa'],
+              ]}
+            />
+          </>
+        );
+        break;
+      }
+      case 'structural_fea': {
+        const tris = result
+          .filter((r) => r.kind === 'element')
+          .map((r) => ({
+            pts: [
+              [n(r.x1), n(r.y1)],
+              [n(r.x2), n(r.y2)],
+              [n(r.x3), n(r.y3)],
+            ] as [number, number][],
+            v: n(r.v1),
+          }));
+        view = (
+          <>
+            <TriField tris={tris} label="von Mises stress (MPa)" height={large ? 420 : 240} />
+            <Facts
+              items={
+                s.case === 'cantilever'
+                  ? [
+                      ['Tip deflection', s.tip_deflection_mm, 'mm'],
+                      ['Beam theory', s.beam_theory_mm, 'mm'],
+                      ['Max von Mises', s.max_von_mises_mpa, 'MPa'],
+                      ['Mesh', `${fmt(s.elements)} quadratic triangles`],
+                    ]
+                  : [
+                      ['Peak stress at the hole', s.peak_stress_mpa, 'MPa'],
+                      ['Stress concentration (net)', s.kt_net],
+                      ['Stress concentration (gross)', s.kt_gross],
+                      ['Mesh', `${fmt(s.elements)} quadratic triangles`],
+                    ]
+              }
+            />
+          </>
+        );
+        break;
+      }
+      case 'heat_fin': {
+        const cells = result.map((r) => ({ x: n(r.x_mm), y: n(r.y_mm), v: n(r.t_c) }));
+        const len = n(card.params.length_mm) || 40;
+        const th = n(card.params.thickness_mm) || 2;
+        view = (
+          <>
+            <GridField
+              cells={cells}
+              label="temperature (°C)"
+              stretch={Math.max(1, Math.round((0.22 * len) / th))}
+              height={large ? 320 : 200}
+            />
+            <Facts
+              items={[
+                ['Heat shed', s.heat_w_per_m, 'W per m of depth'],
+                ['Fin efficiency', s.efficiency],
+                ['Tip temperature', s.tip_c, '°C'],
+                ['Biot number', s.biot],
+              ]}
+            />
+          </>
+        );
+        break;
+      }
+      case 'cavity_flow': {
+        const cells = result.map((r) => ({
+          x: n(r.x),
+          y: n(r.y),
+          v: Math.hypot(n(r.u), n(r.v)),
+          u: n(r.u),
+          w: n(r.v),
+        }));
+        const re = Math.round(n(s.reynolds));
+        const ghia = GHIA_U[re];
+        const line = ((s.u_centerline as [number, number][] | undefined) ?? []).map(
+          ([y, u], i) => ({
+            y,
+            u,
+            ...(ghia ? { ghia: ghia[i] ?? 0 } : {}),
+          }),
+        );
+        view = (
+          <>
+            <GridField cells={cells} label="speed (lid = 1)" arrows height={large ? 460 : 260} />
+            <LineChart
+              rows={line}
+              x="y"
+              series={[
+                { key: 'u', label: 'This simulation', color: '#6e7bf2' },
+                ...(ghia
+                  ? [{ key: 'ghia', label: 'Ghia, Ghia & Shin (1982)', color: '#e0803c' }]
+                  : []),
+              ]}
+              xLabel="Height on the centre line"
+              yLabel="Horizontal velocity u"
+              height={Math.round(h * 0.8)}
+            />
+            <Facts
+              items={[
+                ['Reynolds number', s.reynolds],
+                ['Primary vortex', `(${fmt(s.vortex_x, 3)}, ${fmt(s.vortex_y, 3)})`],
+                ['Stream function at the vortex', s.psi_min],
+                ['Grid', `${fmt(s.grid)} × ${fmt(s.grid)}, ${fmt(s.steps)} steps to steady`],
+              ]}
+            />
+          </>
+        );
+        break;
+      }
+      case 'microstrip': {
+        const cells = result.map((r) => ({ x: n(r.x_mm), y: n(r.y_mm), v: n(r.potential_v) }));
+        view = (
+          <>
+            <GridField
+              cells={cells}
+              label="potential (V, strip at 1 V)"
+              height={large ? 360 : 220}
+            />
+            <Facts
+              items={[
+                ['Characteristic impedance', s.impedance_ohm, 'Ω'],
+                ['Effective permittivity', s.effective_permittivity],
+                ['Capacitance', s.capacitance_pf_per_m, 'pF/m'],
               ]}
             />
           </>
