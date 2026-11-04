@@ -16,6 +16,9 @@ describe('paths and programs on a bot computer', () => {
     expect(viewerFor('/x/engine.STEP')).toBe('freecad');
     expect(viewerFor('/x/1TCA.pdb')).toBe('pymol');
     expect(viewerFor('/x/ligand.sdf')).toBe('pymol');
+    expect(viewerFor('/x/case.vtu')).toBe('paraview');
+    expect(viewerFor('/x/cavity.foam')).toBe('paraview');
+    expect(viewerFor('/x/plate.msh')).toBe('gmsh');
     expect(viewerFor('/x/notes.txt')).toBeNull();
     expect(viewerFor('/x/rivers.geojson', 'qgis')).toBe('qgis');
   });

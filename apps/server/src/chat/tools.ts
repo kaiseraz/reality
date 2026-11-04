@@ -69,6 +69,8 @@ export function viewerFor(path: string, program = ''): string | null {
   if (/\.(step|stp|stl|3mf|obj)$/.test(lower)) return 'freecad';
   if (/\.(gbr|gbl|gtl|gbs|gts|drl|xln)$/.test(lower)) return 'gerbview';
   if (/\.(pdb|ent|cif|mmcif|sdf|mol|mol2|xyz|pse)$/.test(lower)) return 'pymol';
+  if (/\.(vtu|vtk|vtp|vts|pvd|foam|xdmf|exo|e)$/.test(lower)) return 'paraview';
+  if (/\.(msh|geo)$/.test(lower)) return 'gmsh';
   return null;
 }
 
