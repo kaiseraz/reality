@@ -1,5 +1,9 @@
 # Reality: the AI workspace that morphs to the task
 
+**Reality is an open-source AI workspace that turns one sentence into a checked result: a team of AI bots, each with its own Linux computer, builds the work, and independent code verifies every number before it is shown.**
+
+**Built during the Meta Global AI Developer Hackathon (November 2026) on Meta's Muse Spark.** Licensed under Apache 2.0.
+
 You bring only the task. Reality brings the rest: it **acquires the capabilities** the task needs at runtime (a statistics library, a SQL engine, a chemistry toolkit, a CAD kernel), **shapes its workspace** around the work (data, lab, 3D CAD, a bot's live computer), and puts a **team of bots** on it, each with its own Linux computer. What makes it different: **every result is checked by code, independently**. No bot, not even the lead, can declare its own work done.
 
 Built for the Meta Global AI Developer Hackathon, on Meta's Muse Spark.
@@ -68,6 +72,10 @@ npm run setup   # Postgres + sandbox images (Docker must be running)
 npm run dev     # API on :8787, UI on http://localhost:5173
 ```
 
+As a desktop app instead of a browser tab: `npm run desktop` opens Reality in its own
+window, starts the server if it is not running, and asks for a chat's project folder
+in the system's own file explorer, with real paths.
+
 Copy `.env.example` to `.env` and set `META_MODEL_API_KEY` (and optionally `META_MODEL`). The bots' computers need their image once (about 9 GB):
 
 ```bash
@@ -106,6 +114,7 @@ npm run check:model    # is the configured model (Muse Spark or Claude) ready fo
 npm run eval           # evaluation suite → docs/eval/report.md (needs network)
 npm run dev:server     # http://127.0.0.1:8787/api/health
 npm run dev:web        # http://localhost:5173
+npm run desktop        # Reality as a desktop app (Electron), with the system's folder explorer
 npm run sandbox:build  # sandbox image only
 ```
 
