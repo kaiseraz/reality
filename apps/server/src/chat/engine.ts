@@ -1685,9 +1685,16 @@ export class ChatEngine {
       .trim();
     if (!question || last?.role !== 'user') return { passed: true };
     const sample = chatSample;
-    // Small talk is no research job: one short line, nothing started.
-    if (!sample && !labIntent(question) && question.split(/\s+/).length < 4) {
-      await say('Hi. Tell me what to build or check, for example "a launch vehicle for 15 t to orbit".');
+    // Only a lab job, data or an explicit research request starts anything; every other message
+    // gets one short line instead of a literature search.
+    if (
+      !sample &&
+      !labIntent(question) &&
+      !/research|literature|paper|stud(y|ies)|publication|find|search|report/i.test(question)
+    ) {
+      await say(
+        'Without an AI model I only run lab jobs and look up research. Tell me what to build or check, for example "a launch vehicle for 15 t to orbit".',
+      );
       return { passed: false };
     }
     this.setPresence(bot.id, 'working', 'starts an analysis');

@@ -172,6 +172,10 @@ export class TeamService {
         for (const d of m.domains) {
           await this.deps.computers.allow(bot.id, d, chat.ownerId).catch(() => undefined);
         }
+        // A hired specialist gets its own computer at once, so its desktop is there to watch.
+        void this.deps.computers
+          .ensure(bot.id)
+          .catch((err: unknown) => this.deps.log?.error({ err }, 'computer start at hire'));
         if (m.setup) {
           const setup = m.setup;
           // Preparing a computer can take minutes; the specialist starts meanwhile.
