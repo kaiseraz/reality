@@ -27,6 +27,7 @@
     "sandbox:build": "docker build -t reality-sandbox-python:dev sandbox/python && docker build -t reality-sandbox-node:dev sandbox/node",
     "computer:build": "docker build -t reality-computer:dev sandbox/computer",
     "dev": "node scripts-dev.mjs",
+    "desktop": "npm run dev --workspace @reality/desktop",
     "setup": "docker compose up -d --wait postgres && docker build -t reality-sandbox-python:dev sandbox/python && docker build -t reality-sandbox-node:dev sandbox/node",
     "eval": "npm run eval --workspace @reality/server",
     "check:model": "npm run check:model --workspace @reality/server",
@@ -49,5 +50,9 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.2",
     "vitest": "5.0.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "electron@45.2.2": true
   }
 }

@@ -1,0 +1,16 @@
+{
+  "name": "@reality/desktop",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Reality as a desktop app: the web UI in its own window, and the system's own file explorer for folders",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^45.2.2"
+  }
+}
