@@ -67,10 +67,12 @@ describe('display formatting', () => {
 });
 
 describe('start screen', () => {
-  it('sends a question to a fresh lead chat, and a /mission starts the team on its goal', async () => {
+  it('picks the folder with the first message, sends a question to a fresh lead chat, and a /mission starts the team on its goal', async () => {
     const calls: string[] = [];
     const leadId = '22222222-2222-4222-8222-222222222222';
     const chatId = '33333333-3333-4333-8333-333333333333';
+    const missionChat = '44444444-4444-4444-8444-444444444444';
+    const posts = (all: string[]) => all.filter((c) => c.startsWith('POST'));
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -78,6 +80,8 @@ describe('start screen', () => {
         calls.push(`${init?.method ?? 'GET'} ${url}`);
         if (url === '/api/health')
           return Response.json({ status: 'ok', planner: 'rules', sandboxProblem: null });
+        if (url === '/api/folders')
+          return Response.json({ path: 'C:\\proj', parent: null, dirs: [], roots: [] });
         if (url === '/api/samples')
           return Response.json([
             { id: 'bike', title: 'Bike sharing', description: 'd', question: 'Q?', source: 's' },
@@ -109,7 +113,6 @@ describe('start screen', () => {
       }),
     );
     let missionBody: { goal: string; botIds: string[] } | null = null;
-    const missionChat = '44444444-4444-4444-8444-444444444444';
     render(<App />);
     const box = await screen.findByPlaceholderText('Ask Reality anything…');
     // The start page has the lead, not example boxes.
@@ -117,11 +120,14 @@ describe('start screen', () => {
     expect((await screen.findAllByRole('img', { name: /^Reality/ })).length).toBeGreaterThan(0);
     expect(document.querySelector('.home-hero .bot-figure')).toBeTruthy();
     fireEvent.change(box, { target: { value: 'How strong is the seasonal cycle?' } });
+    // Enter opens the folder explorer first, like in Claude Code; nothing runs yet.
     fireEvent.keyDown(box, { key: 'Enter' });
+    expect(posts(calls)).toEqual([]);
+    // The chosen folder goes on the fresh chat, then the message goes out — never in an older chat.
+    fireEvent.click(await screen.findByRole('button', { name: 'Use this folder' }));
     await waitFor(() => expect(window.location.hash).toBe(`#/chat/${chatId}`));
-    const posts = calls.filter((c) => c.startsWith('POST'));
-    // A fresh chat is created first; the message must not land in an older chat.
-    expect(posts).toEqual(['POST /api/chats', `POST /api/chats/${chatId}/messages`]);
+    expect(posts(calls)).toEqual(['POST /api/chats', `POST /api/chats/${chatId}/messages`]);
+    expect(calls).toContain(`PUT /api/chats/${chatId}/folder`);
     expect(calls.some((c) => c.includes(`/api/bots/${leadId}/chat`))).toBe(false);
 
     window.location.hash = '';
@@ -130,11 +136,14 @@ describe('start screen', () => {
     expect(await screen.findByText('Work on it overnight')).toBeTruthy();
     fireEvent.change(again, { target: { value: '/mission Find the best lipase for biodiesel' } });
     fireEvent.keyDown(again, { key: 'Enter' });
+    // The mission asks for its folder too, before the team works.
+    fireEvent.click(await screen.findByRole('button', { name: 'Use this folder' }));
     await waitFor(() => expect(window.location.hash).toBe(`#/chat/${missionChat}`));
     expect(missionBody).toMatchObject({
       goal: 'Find the best lipase for biodiesel',
       botIds: [leadId],
     });
+    expect(calls).toContain(`PUT /api/chats/${missionChat}/folder`);
   });
 
   it('lists a direct chat with an employee that is not the lead', async () => {

@@ -8,7 +8,7 @@ import { BotTeamStack } from '../bots/BotBirths.tsx';
 import { Markdown } from '../pages/markdown.tsx';
 import { Icon } from '../ui/Icon.tsx';
 import { Card, isActionableCard } from './Cards.tsx';
-import { FolderChip } from './ProjectFolder.tsx';
+import { FolderChip, FolderChooser } from './ProjectFolder.tsx';
 import type { VisualFocus } from './VisualPanel.tsx';
 import { Workbench } from './Workbench.tsx';
 import { CommandMenu, matchingCommands, parseCommand, startMission } from './commands.tsx';
@@ -50,6 +50,9 @@ export function ChatView({
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Like Claude Code: with the first message the explorer asks where this work is saved,
+  // and the message waits (the draft stays) until a folder is on the chat.
+  const [awaitFolder, setAwaitFolder] = useState<string | null>(null);
   // The workbench (computers) stays closed until the person opens it: a new chat
   // should start as a conversation, not as a wall of screens.
   const [board, setBoard] = useState(false);
@@ -157,6 +160,12 @@ export function ChatView({
     e?.preventDefault();
     const text = draft.trim();
     if (!text || busy) return;
+    // The first message asks for its folder first, like Claude Code; after the choice
+    // it goes out to the chat that now has the folder.
+    if (state.folders && !state.hostFolder && state.messages.length === 0 && !awaitFolder) {
+      setAwaitFolder(text);
+      return;
+    }
     setDraft('');
     // A mission is this team working on through the night, in a chat of its own.
     const cmd = parseCommand(text);
@@ -386,6 +395,18 @@ export function ChatView({
           </div>
         </form>
       </div>
+
+      {awaitFolder && (
+        <FolderChooser
+          confirm={async (path) => {
+            await api.setChatFolder(state.id, path);
+            const text = awaitFolder;
+            if (text) await act(() => api.sendChat(state.id, text));
+          }}
+          onConfirmed={() => setAwaitFolder(null)}
+          onClose={() => setAwaitFolder(null)}
+        />
+      )}
 
       {board && (
         <Workbench

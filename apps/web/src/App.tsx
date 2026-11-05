@@ -175,7 +175,7 @@ export function App({
     return () => window.removeEventListener('keydown', onKey);
   }, [toggleSidebar]);
 
-  const start = async ({ request, file, sample }: StartRequest) => {
+  const start = async ({ request, file, sample, folder }: StartRequest) => {
     // An uploaded file still takes the direct data path: create a draft, attach the
     // data, then start, so planning sees the schema. Everything else is a message to
     // the lead, which answers or turns it into a checked job with a plan.
@@ -188,6 +188,8 @@ export function App({
       return;
     }
     const chat = await freshLeadChat();
+    // The folder is chosen before anything runs: it is on the chat before the first words.
+    if (folder) await api.setChatFolder(chat.id, folder);
     await api.sendChat(chat.id, request, sample);
     loadTasks();
     go({ page: 'chat', id: chat.id });

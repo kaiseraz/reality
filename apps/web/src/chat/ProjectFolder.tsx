@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type FolderListing, type FolderStatus } from '../api.ts';
+import { desktopApi } from './desktop.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { FileTree } from './FileTree.tsx';
 
@@ -28,7 +29,11 @@ export function FolderChip({
         className="btn-ghost small"
         title={path ?? 'Choose where this work is saved on your computer'}
         onClick={() =>
-          path ? void api.openChatFolder(chatId).catch(() => setPicking(true)) : setPicking(true)
+          path
+            ? desktopApi
+              ? void desktopApi.openPath(path).catch(() => setPicking(true))
+              : void api.openChatFolder(chatId).catch(() => setPicking(true))
+            : setPicking(true)
         }
       >
         <Icon name="folder" size={14} /> {path ? nameOf(path) : 'Choose folder'}
@@ -48,24 +53,78 @@ export function FolderChip({
   );
 }
 
-/** A browser cannot hand over a real path, so Reality shows this computer's folders itself. */
-function FolderPicker({
-  chatId,
+/**
+ * Asks which folder to use: browses this computer's folders, takes an optional new
+ * folder name, and hands the chosen path to `confirm` on "Use this folder". A refusal
+ * (bad path, no permission) shows in the dialog and keeps it open.
+ */
+export function FolderChooser({
   start,
+  heading,
+  note,
+  confirm,
+  onConfirmed,
   onClose,
-  onChosen,
 }: {
-  chatId: string;
-  start: string | null;
+  start?: string | undefined;
+  heading?: string;
+  note?: string;
+  /** Does what needs doing with the chosen path; a rejected promise keeps the dialog open. */
+  confirm: (path: string) => Promise<void>;
+  onConfirmed: () => void;
   onClose: () => void;
-  onChosen: () => void;
 }) {
   const [at, setAt] = useState<string | undefined>(start ?? undefined);
   const [list, setList] = useState<FolderListing | null>(null);
   const [fresh, setFresh] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // One more try of the native pick after a refusal; changing it re-runs the effect.
+  const [attempt, setAttempt] = useState(0);
+
+  // Later callbacks without reopening the native explorer.
+  const confirmRef = useRef(confirm);
+  const doneRef = useRef({ onConfirmed, onClose });
+  useEffect(() => {
+    confirmRef.current = confirm;
+    doneRef.current = { onConfirmed, onClose };
+  });
+
+  // In the desktop app the system's own file explorer does the choosing; the tree below
+  // is only for the browser, where a page may not see paths.
+  const native = desktopApi !== undefined;
+  useEffect(() => {
+    if (!native) return;
+    const nativeChoose = desktopApi;
+    if (!nativeChoose) return;
+    let live = true;
+    nativeChoose
+      .chooseFolder()
+      .then((chosen) => {
+        if (!live) return;
+        if (!chosen) {
+          doneRef.current.onClose();
+          return;
+        }
+        setError(null);
+        confirmRef
+          .current(chosen)
+          .then(() => {
+            if (live) doneRef.current.onConfirmed();
+          })
+          .catch((e: unknown) => {
+            if (live) setError(e instanceof Error ? e.message : String(e));
+          });
+      })
+      .catch(() => {
+        if (live) doneRef.current.onClose();
+      });
+    return () => {
+      live = false;
+    };
+  }, [native, attempt]);
 
   useEffect(() => {
+    if (native) return;
     let live = true;
     api
       .folders(at)
@@ -78,7 +137,7 @@ function FolderPicker({
     return () => {
       live = false;
     };
-  }, [at]);
+  }, [at, native]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -88,15 +147,38 @@ function FolderPicker({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  if (native) {
+    // While the explorer is open the page stays still; a refusal shows here.
+    if (!error) return null;
+    return createPortal(
+      <div className="folder-overlay" role="dialog" aria-label="Choose a folder">
+        <div className="folder-dialog">
+          <h2>{heading ?? 'Where should this work be saved?'}</h2>
+          <p className="callout tone-bad" role="alert">
+            {error}
+          </p>
+          <div className="folder-actions">
+            <button type="button" className="btn-ghost" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="button" className="btn-primary" onClick={() => setAttempt((a) => a + 1)}>
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+
   const separator = list?.path.includes('\\') ? '\\' : '/';
-  const choose = () => {
+  const use = () => {
     if (!list) return;
     const base = list.path.replace(/[\\/]+$/, '');
     const path = fresh.trim() ? `${base}${separator}${fresh.trim()}` : list.path;
     setError(null);
-    api
-      .setChatFolder(chatId, path)
-      .then(onChosen)
+    confirm(path)
+      .then(onConfirmed)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   };
 
@@ -104,10 +186,10 @@ function FolderPicker({
   return createPortal(
     <div className="folder-overlay" role="dialog" aria-label="Choose a folder">
       <div className="folder-dialog">
-        <h2>Where should this work be saved?</h2>
+        <h2>{heading ?? 'Where should this work be saved?'}</h2>
         <p className="muted small">
-          Reality copies finished files here. Files you changed are never overwritten, and nothing
-          here is deleted. Bots cannot see this folder.
+          {note ??
+            'Reality copies finished files here. Files you changed are never overwritten, and nothing here is deleted. Bots cannot see this folder.'}
         </p>
         <div className="folder-roots">
           {list?.roots.map((r) => (
@@ -161,13 +243,35 @@ function FolderPicker({
           <button type="button" className="btn-ghost" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn-primary" disabled={!list} onClick={choose}>
+          <button type="button" className="btn-primary" disabled={!list} onClick={use}>
             Use this folder
           </button>
         </div>
       </div>
     </div>,
     document.body,
+  );
+}
+
+/** The chat-bound chooser: the path is written on the chat (PUT /api/chats/:id/folder). */
+function FolderPicker({
+  chatId,
+  start,
+  onClose,
+  onChosen,
+}: {
+  chatId: string;
+  start: string | null;
+  onClose: () => void;
+  onChosen: () => void;
+}) {
+  return (
+    <FolderChooser
+      start={start ?? undefined}
+      confirm={(path) => api.setChatFolder(chatId, path).then(() => undefined)}
+      onConfirmed={onChosen}
+      onClose={onClose}
+    />
   );
 }
 
@@ -209,7 +313,12 @@ export function FilesPanel({ chatId, onChange }: { chatId: string; onChange: () 
           <button
             type="button"
             className="btn-ghost small"
-            onClick={() => void api.openChatFolder(chatId).catch(() => undefined)}
+            onClick={() =>
+              desktopApi
+                ? status.path && void desktopApi.openPath(status.path).catch(() => undefined)
+                : void api.openChatFolder(chatId).catch(() => undefined)
+            }
+            disabled={!status.path}
           >
             <Icon name="folder" size={14} /> Open folder
           </button>

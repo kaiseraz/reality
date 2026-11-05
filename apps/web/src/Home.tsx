@@ -4,12 +4,15 @@ import { api, type Health } from './api.ts';
 import { BotAvatar } from './bots/BotAvatar.tsx';
 import { BotFigure } from './bots/BotFigure.tsx';
 import { CommandMenu, matchingCommands, parseCommand, startMission } from './chat/commands.tsx';
+import { FolderChooser } from './chat/ProjectFolder.tsx';
 import { BrandMark, Icon } from './ui/Icon.tsx';
 
 export interface StartRequest {
   request: string;
   file?: File | undefined;
   sample?: string | undefined;
+  /** Where the work is saved on this computer; chosen before anything starts. */
+  folder?: string | undefined;
 }
 
 /** Grows with its content, up to the CSS max-height. */
@@ -57,6 +60,13 @@ export function Home({
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lead, setLead] = useState<BotView | null>(null);
+  // Like Claude Code: with the first message the explorer asks where the work is saved,
+  // and the message waits (the draft stays) until the folder is chosen.
+  const [awaitFolder, setAwaitFolder] = useState<
+    | { kind: 'start'; request: StartRequest }
+    | { kind: 'mission'; goal: string; botIds: string[] }
+    | null
+  >(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
 
@@ -89,20 +99,13 @@ export function Home({
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
     if (!draft.trim() || submitting) return;
+    // The first message asks for its folder first; then it goes out with it.
     const cmd = parseCommand(draft);
     if (cmd?.name === 'mission') {
-      setSubmitting('composer');
-      setSubmitError(null);
-      void startMission(cmd.rest, lead ? [lead.id] : [])
-        .then((m) => {
-          setDraft('');
-          window.location.hash = `#/chat/${m.chatId}`;
-        })
-        .catch((err: unknown) => setSubmitError(err instanceof Error ? err.message : String(err)))
-        .finally(() => setSubmitting(null));
+      setAwaitFolder({ kind: 'mission', goal: cmd.rest, botIds: lead ? [lead.id] : [] });
       return;
     }
-    void start({ request: draft.trim(), file: file ?? undefined }, 'composer');
+    setAwaitFolder({ kind: 'start', request: { request: draft.trim(), file: file ?? undefined } });
   };
 
   const onDrop = (e: DragEvent) => {
@@ -126,6 +129,33 @@ export function Home({
           <span className="home-word">Reality</span>
         </div>
         <p className="home-sub">{greeting()} How can I help?</p>
+
+        {awaitFolder && (
+          <FolderChooser
+            confirm={async (path) => {
+              const job = awaitFolder;
+              if (!job) return;
+              if (job.kind === 'mission') {
+                setSubmitting('composer');
+                setSubmitError(null);
+                try {
+                  const m = await startMission(job.goal, job.botIds);
+                  await api.setChatFolder(m.chatId, path);
+                  setDraft('');
+                  window.location.hash = `#/chat/${m.chatId}`;
+                } catch (err: unknown) {
+                  setSubmitting(null);
+                  throw err;
+                }
+                return;
+              }
+              // The message waits until the folder is on the fresh chat, then goes out.
+              await start({ ...job.request, folder: path }, 'composer');
+            }}
+            onConfirmed={() => setAwaitFolder(null)}
+            onClose={() => setAwaitFolder(null)}
+          />
+        )}
 
         {healthError && (
           <p className="callout tone-bad home-notices" role="alert">
@@ -209,7 +239,7 @@ export function Home({
             ) : (
               <span className="hint">Attach a CSV or drop it here</span>
             )}
-            <span className="grow" />
+            <span className="grow" />{' '}
             {lead && (
               <span
                 className="hero-chip"
